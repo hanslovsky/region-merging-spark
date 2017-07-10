@@ -150,17 +150,7 @@ public class DataPreparation
 			return new Tuple2<>( positionAndData._1(), dat );
 		} );
 
-		graphs.cache();
-		graphs.count();
-
-//		System.out.println( "FINAL? " + graphs.collect().get( 0 )._2().nonContractingEdges() );
-
-//		graphs.map( g -> {
-//			System.out.println( Arrays.toString( g._1().getData() ) + " " + g._2().nonContractingEdges() );
-//			return 1;
-//		} ).count();
-
-		return graphs;
+		return setValidAndStale( graphs, merger.dataSize() );
 
 	}
 
@@ -336,6 +326,21 @@ public class DataPreparation
 		final RandomAccessibleInterval< R > affinities = new CachedCellImg<>( affinitiesGrid, ldr.affinityType(), affinitiesCache, ldr.affinityAccess() );
 
 		return new Tuple2<>( blockPosition, new Tuple2<>( labels, affinities ) );
+	}
+
+	public static < K > JavaPairRDD< K, Data > setValidAndStale( final JavaPairRDD< K, Data > input, final int dataSize )
+	{
+		return input.mapValues( data -> {
+			final Edge e = new Edge( data.edges(), dataSize );
+			final int numEdges = e.size();
+			for ( int i = 0; i < numEdges; ++i )
+			{
+				e.setIndex( i );
+				e.setValid();
+				e.setStale();
+			}
+			return data;
+		} );
 	}
 
 	public static void main( final String[] args )

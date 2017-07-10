@@ -173,6 +173,8 @@ public class DataPreparationTest
 				e.setIndex( i );
 				Assert.assertEquals( 1, e.multiplicity() );
 				Assert.assertEquals( Math.min( e.from(), e.to() ), e.affinity(), 0.0 );
+				Assert.assertTrue( e.isValid() );
+				Assert.assertTrue( e.isStale() );
 				if ( nonContractingEdges.contains( i ) )
 					++nonContractingEdgeCount;
 				else
@@ -262,6 +264,8 @@ public class DataPreparationTest
 			Assert.assertTrue( "from < to: " + el, el.from() < el.to() );
 			Assert.assertTrue( "edge is non-contracting", nonContractingEdgesL.contains( i ) );
 			Assert.assertEquals( 1.0, el.affinity(), 0.0 );
+			Assert.assertTrue( el.isValid() );
+			Assert.assertTrue( el.isStale() );
 			if ( el.to() == 2 )
 				Assert.assertEquals( 2, el.multiplicity() );
 			if ( el.to() == 3 )
@@ -273,6 +277,8 @@ public class DataPreparationTest
 			er.setIndex( i );
 			Assert.assertTrue( "from < to: " + er, er.from() < er.to() );
 			Assert.assertEquals( 1.0, er.affinity(), 0.0 );
+			Assert.assertTrue( er.isValid() );
+			Assert.assertTrue( er.isStale() );
 			if ( er.from() == 1 )
 			{
 				Assert.assertTrue( "edge is non-contracting", nonContractingEdgesR.contains( i ) );
