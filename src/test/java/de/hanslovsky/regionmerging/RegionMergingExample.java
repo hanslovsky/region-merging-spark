@@ -5,7 +5,9 @@ import java.util.HashMap;
 import java.util.Map.Entry;
 import java.util.Random;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.IntFunction;
+import java.util.stream.Stream;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
@@ -33,6 +35,7 @@ import de.hanslovsky.graph.edge.EdgeWeight.MedianAffinityWeight;
 import de.hanslovsky.regionmerging.BlockedRegionMergingSpark.Data;
 import de.hanslovsky.regionmerging.BlockedRegionMergingSpark.Options;
 import de.hanslovsky.regionmerging.DataPreparation.Loader;
+import de.hanslovsky.util.ValueDisplayListener;
 import de.hanslovsky.util.unionfind.HashMapStoreUnionFind;
 import gnu.trove.iterator.TIntObjectIterator;
 import gnu.trove.list.array.TDoubleArrayList;
@@ -43,20 +46,25 @@ import gnu.trove.map.hash.TLongLongHashMap;
 import gnu.trove.set.hash.TIntHashSet;
 import net.imglib2.RandomAccessible;
 import net.imglib2.RandomAccessibleInterval;
+import net.imglib2.RealRandomAccess;
 import net.imglib2.cache.img.CellLoader;
 import net.imglib2.converter.Converter;
 import net.imglib2.converter.Converters;
+import net.imglib2.converter.RealARGBConverter;
 import net.imglib2.img.array.ArrayImgs;
 import net.imglib2.img.basictypeaccess.array.FloatArray;
 import net.imglib2.img.basictypeaccess.array.LongArray;
 import net.imglib2.img.cell.CellImg;
+import net.imglib2.interpolation.randomaccess.NearestNeighborInterpolatorFactory;
 import net.imglib2.type.Type;
 import net.imglib2.type.numeric.ARGBType;
 import net.imglib2.type.numeric.integer.LongType;
 import net.imglib2.type.numeric.real.FloatType;
 import net.imglib2.util.Intervals;
 import net.imglib2.util.Pair;
+import net.imglib2.view.IntervalView;
 import net.imglib2.view.Views;
+import net.imglib2.view.composite.RealComposite;
 
 public class RegionMergingExample
 {
@@ -65,7 +73,8 @@ public class RegionMergingExample
 
 	public static void main( final String[] args )
 	{
-		final String path = HOME_DIR + "/Dropbox/misc/excerpt.h5";
+		final String path = HOME_DIR + "/Downloads/excerpt.h5";
+//		final String path = HOME_DIR + "/local/tmp/data-jan.h5";
 		final CellImg< FloatType, ? > input = H5Utils.loadFloat( path, "main", new int[] { 300, 300, 100, 3 } );
 		System.out.println( "Loaded affinities from " + path + "/main" );
 		final RandomAccessibleInterval< FloatType > affs = ArrayImgs.floats( Intervals.dimensionsAsLongArray( input ) );
@@ -76,7 +85,7 @@ public class RegionMergingExample
 		for ( final Pair< FloatType, FloatType > p : Views.interval( Views.pair( inputPerm, affs ), affs ) )
 			p.getB().set( p.getA() );
 
-		final RandomAccessibleInterval< LongType > labels = H5Utils.loadUnsignedLong( path, "zws", new int[] { 300, 300, 100 } );
+		final RandomAccessibleInterval< LongType > labels = H5Utils.loadUnsignedLong( path, "zws", new int[] { 300, 300, 10 } );
 		System.out.println( "Loaded labels from " + path + "/zws" );
 
 
@@ -85,23 +94,54 @@ public class RegionMergingExample
 		for ( final LongType l : Views.flatIterable( labels ) )
 			if ( !colors.contains( l.get() ) )
 				colors.put( l.get(), rng.nextInt() );
+		colors.put( 0, 0 );
 
 		final BdvStackSource< ARGBType > bdv = BdvFunctions.show( Converters.convert( Views.collapseReal( affs ), ( s, t ) -> {
 			t.set( ARGBType.rgba( 255 * s.get( 0 ).get(), 255 * s.get( 1 ).get(), 255 * s.get( 2 ).get(), 1.0 ) );
-		}, new ARGBType() ), "affinity", BdvOptions.options().is2D() );
+		}, new ARGBType() ), "affinity", BdvOptions.options() );
+		final double factor = 1.0;// 0.52;
+//		for ( final FloatType a : Views.hyperSlice( affs, 3, 2l ) )
+//			a.mul( factor );
+//
+//		{
+//			final IntervalView< FloatType > hs = Views.hyperSlice( affs, 3, 2l );
+//			for ( long z = 0; z < hs.dimension( 2 ); ++z ) {
+//				final IntervalView< FloatType > hs2 = Views.hyperSlice( hs, 2, z );
+//				Erosion.erodeInPlace( Views.extendBorder( hs2 ), hs2, new RectangleShape( 10, false ), Runtime.getRuntime().availableProcessors() );
+//			}
+//		}
+
+		{
+			final IntervalView< FloatType > hs = Views.hyperSlice( affs, 3, 2l );
+			final BdvStackSource< ARGBType > wargs = BdvFunctions.show( Converters.convert( ( RandomAccessibleInterval< FloatType > ) hs, new RealARGBConverter<>( 0.0, factor ), new ARGBType() ), "affs-z-only" );
+			final ValueDisplayListener vdl = new ValueDisplayListener( wargs.getBdvHandle().getViewerPanel() );
+			vdl.addSource( wargs.getSources().get( 0 ).getSpimSource(), Views.interpolate( Views.extendValue( hs, new FloatType( 0.0f ) ), new NearestNeighborInterpolatorFactory<>() ).realRandomAccess(), f -> f.toString() );
+		}
+
+		final RealComposite< FloatType > extension = Views.collapseReal( ArrayImgs.floats( new float[ affs.numDimensions() ], 1, affs.numDimensions() ) ).randomAccess().get();
+
+		final RealRandomAccess< RealComposite< FloatType > > rra = Views.interpolate( Views.extendValue( Views.collapseReal( affs ), extension ), new NearestNeighborInterpolatorFactory<>() ).realRandomAccess();
+		final ValueDisplayListener vdl = new ValueDisplayListener( bdv.getBdvHandle().getViewerPanel() );
+		final Function< RealComposite< FloatType >, String > ts = ( Function< RealComposite< FloatType >, String > ) col -> String.format( "(%.3f,%.3f,%.3f)", col.get( 0 ).get(), col.get( 1 ).get(), col.get( 2 ).get() );
+		vdl.addSource( bdv.getSources().get( 0 ).getSpimSource(), rra, ts );
 
 		final Converter< LongType, ARGBType > colorConv = ( s, t ) -> {
 			t.set( colors.get( s.get() ) );
 		};
-		BdvFunctions.show( Converters.convert( labels, colorConv, new ARGBType() ), "labels", BdvOptions.options().addTo( bdv ) );
+		final BdvStackSource< ARGBType > bdvLabels = BdvFunctions.show( Converters.convert( labels, colorConv, new ARGBType() ), "labels", BdvOptions.options().addTo( bdv ) );
+		vdl.addSource( bdvLabels.getSources().get( 0 ).getSpimSource(), Views.interpolate( Views.extendValue( labels, new LongType( -1 ) ), new NearestNeighborInterpolatorFactory<>() ).realRandomAccess(), v -> v.toString() );
 
 		final int nBins = 256;
 		final AffinityHistogram creator = new EdgeCreator.AffinityHistogram( nBins, 0.0, 1.0 );
 		final MEDIAN_AFFINITY_MERGER merger = new EdgeMerger.MEDIAN_AFFINITY_MERGER( nBins );
 		final MedianAffinityWeight edgeWeight = new EdgeWeight.MedianAffinityWeight( nBins, 0.0, 1.0 );
 
+//		final NoDataSerializableCreator creator = new EdgeCreator.NoDataSerializableCreator();
+//		final MIN_AFFINITY_MERGER merger = new EdgeMerger.MIN_AFFINITY_MERGER();
+//		final EdgeWeight edgeWeight = new EdgeWeight.OneMinusAffinity();
+
 		final long[] dimensions = Intervals.dimensionsAsLongArray( labels );
-		final int[] blockSize = { 300, 300, 3 };
+		final int[] blockSize = { 300, 300, 1 };
 
 		final CellLoader< LongType > ll = cell -> {
 			burnIn( labels, cell );
@@ -149,20 +189,32 @@ public class RegionMergingExample
 
 		final TIntObjectHashMap< TLongArrayList > merges = accu.value();
 
-		final HashMapStoreUnionFind uf = new HashMapStoreUnionFind();
-//		for ( final TLongArrayList list : merges.get( 0 ) )
-		final TLongArrayList list = merges.get( 0 );
-		System.out.println( "Got " + list.size() / 4 + " merges!" );
-		for ( int i = 0; i < list.size(); i += 4 ) {
-			final long r1 = uf.findRoot( list.get( i + 0 ) );
-			final long r2 = uf.findRoot( list.get( i + 1  ) );
-//			System.out.println( list.get( i ) + " " + list.get( i + 1 ) + " " + r1 + " " + r2 );
-			if ( r1 != r2 )
-				uf.join( r1, r2 );
+		final HashMapStoreUnionFind[] ufs = Stream.generate( HashMapStoreUnionFind::new ).limit( merges.size() ).toArray( HashMapStoreUnionFind[]::new );
+
+		for ( int iteration = 0; iteration < ufs.length; ++iteration )
+		{
+
+			final TLongArrayList list = merges.get( iteration );
+
+			System.out.println( "Got " + list.size() / 4 + " merges!" );
+
+			for ( int ufIndex = iteration; ufIndex < ufs.length; ++ufIndex )
+			{
+
+				final HashMapStoreUnionFind uf = ufs[ ufIndex ];
+				for ( int i = 0; i < list.size(); i += 4 )
+				{
+					final long r1 = uf.findRoot( list.get( i + 0 ) );
+					final long r2 = uf.findRoot( list.get( i + 1 ) );
+//				System.out.println( list.get( i ) + " " + list.get( i + 1 ) + " " + r1 + " " + r2 );
+					if ( r1 != r2 )
+						uf.join( r1, r2 );
+				}
+			}
 		}
 
 //		final TLongArrayList list = mergesLog.get( 0 );
-//		System.out.println( "Got " + list.size() / 2 + " merges!" );
+//		System.out.println( "Got " + lst.size() / 2 + " merges!" );
 //		for ( int i = 0; i < list.size(); i += 2 )
 //		{
 //			final long r1 = uf.findRoot( list.get( i + 0 ) );
@@ -172,8 +224,15 @@ public class RegionMergingExample
 //				uf.join( r1, r2 );
 //		}
 
-		final RandomAccessibleInterval< LongType > firstJoined = Converters.convert( labels, (s,t) -> { t.set( uf.findRoot( s.get() ) );}, new LongType() );
-		BdvFunctions.show( Converters.convert( firstJoined, colorConv, new ARGBType() ), "after first iteration", BdvOptions.options().addTo( bdv ) );
+		for ( int i = 0; i < ufs.length; ++i )
+		{
+			final HashMapStoreUnionFind uf = ufs[ i ];
+			final RandomAccessibleInterval< LongType > firstJoined = Converters.convert( labels, ( s, t ) -> {
+				t.set( uf.findRoot( s.get() ) );
+			}, new LongType() );
+			final BdvStackSource< ARGBType > bdvIter = BdvFunctions.show( Converters.convert( firstJoined, colorConv, new ARGBType() ), "after iteration " + i, BdvOptions.options().addTo( bdv ) );
+			vdl.addSource( bdvIter.getSources().get( 0 ).getSpimSource(), Views.interpolate( Views.extendValue( firstJoined, new LongType( -1 ) ), new NearestNeighborInterpolatorFactory<>() ).realRandomAccess(), v -> v.toString() );
+		}
 		bdv.getBdvHandle().getViewerPanel().setDisplayMode( DisplayMode.SINGLE );
 	}
 
@@ -363,6 +422,7 @@ public class RegionMergingExample
 					mergesInBlock.add( node2 );
 					mergesInBlock.add( newNode );
 					mergesInBlock.add( Double.doubleToRawLongBits( weight ) );
+//					System.out.println( "Added merge " + node1 + " " + node2 + " " + newNode + " " + weight );
 				}
 
 				@Override
@@ -374,7 +434,7 @@ public class RegionMergingExample
 						m.put( value, mergesInBlock );
 						merges.add( m );
 					}
-//					System.out.println( "Added " + mergesInBlock.size() / 4 + " merges at iteration " + value );
+					System.out.println( "Added " + mergesInBlock.size() / 4 + " merges at iteration " + value );
 				}
 			};
 		}
