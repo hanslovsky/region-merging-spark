@@ -70,6 +70,8 @@ public class BlockedRegionMergingSpark
 
 		private final StorageLevel persistenceLevel;
 
+		private final int minimuMultiplicity = 0;
+
 		public Options( final double threshold, final StorageLevel persistenceLevel )
 		{
 			super();
@@ -120,9 +122,17 @@ public class BlockedRegionMergingSpark
 
 		JavaPairRDD< HashWrapper< long[] >, Data > targetRdd = rdd;
 		int iteration = 0;
-		while ( targetRdd.count() > 1 )
+		boolean hasReachedSingleBlock = false;
+		final int dataSize = merger.dataSize();
+		while ( !hasReachedSingleBlock )
 		{
+			hasReachedSingleBlock = targetRdd.count() == 1;
+			System.out.println( targetRdd.count() + " blocks at iteration " + iteration );
 			final int finalIteration = iteration;
+			targetRdd.map( t -> {
+				System.out.println( Arrays.toString( t._1().getData() ) + ": Starting agglomeration with " + new Edge( t._2().edges(), dataSize ).size() + " edges, and " + t._2().nonContractingEdges().values().stream().mapToInt( c -> c.size() ).sum() + " non-contracting edges." );
+				return t;
+			} ).count();
 			final JavaPairRDD< HashWrapper< long[] >, Tuple2< Data, TLongArrayList > > mergedEdgesWithMergeLog = createGraphAndContractMinimalEdges( targetRdd, optionsBC, merger, edgeWeight, mergeNotifyGenerator, finalIteration );
 			mergedEdgesWithMergeLog.cache();
 			final JavaPairRDD< HashWrapper< long[] >, Data > mergedEdges = mergedEdgesWithMergeLog.mapValues( p -> p._1() );
@@ -145,17 +155,19 @@ public class BlockedRegionMergingSpark
 
 		}
 
+//		createGraphAndContractMinimalEdges( targetRdd, optionsBC, merger, edgeWeight, mergeNotifyGenerator, iteration ).count();
+
 		if ( targetRdd != rdd )
 			targetRdd.unpersist();
 
 	}
 
-	public static long[] adjustPosition( final long[] position, final long factor )
+	private static long[] adjustPosition( final long[] position, final long factor )
 	{
 		return Arrays.stream( position ).map( p -> p / factor ).toArray();
 	}
 
-	public static TLongObjectHashMap< TLongIntHashMap > createNodeEdgeMap( final Edge e )
+	private static TLongObjectHashMap< TLongIntHashMap > createNodeEdgeMap( final Edge e )
 	{
 		final TLongObjectHashMap< TLongIntHashMap > nodeEdgeMap = new TLongObjectHashMap<>();
 		for ( int edgeIndex = 0; edgeIndex < e.size(); ++edgeIndex )
@@ -181,6 +193,7 @@ public class BlockedRegionMergingSpark
 				}
 				else
 				{
+					assert !toMap.contains( from ): "Map inconsistency!";
 					fromMap.put( to, edgeIndex );
 					toMap.put( from, edgeIndex );
 				}
@@ -189,12 +202,12 @@ public class BlockedRegionMergingSpark
 		return nodeEdgeMap;
 	}
 
-	public static JavaPairRDD< HashWrapper< long[] >, Data > adjustPosition( final JavaPairRDD< HashWrapper< long[] >, Data > input, final int factor )
+	private static JavaPairRDD< HashWrapper< long[] >, Data > adjustPosition( final JavaPairRDD< HashWrapper< long[] >, Data > input, final int factor )
 	{
 		return input.mapToPair( t -> adjustPosition( t, factor ) );
 	}
 
-	public static Tuple2< HashWrapper< long[] >, Data > adjustPosition( final Tuple2< HashWrapper< long[] >, Data > t, final int factor )
+	private static Tuple2< HashWrapper< long[] >, Data > adjustPosition( final Tuple2< HashWrapper< long[] >, Data > t, final int factor )
 	{
 		final long[] key = adjustPosition( t._1().getData(), factor );
 		final HashWrapper< long[] > hashedKey = new HashWrapper<>( key, t._1().getHash(), t._1().getEquals() );
@@ -208,7 +221,7 @@ public class BlockedRegionMergingSpark
 		return new Tuple2<>( hashedKey, new Data( data.edges, nonContractingEdges, data.counts ) );
 	}
 
-	public static final JavaPairRDD< HashWrapper< long[] >, Tuple2< Data, TLongArrayList > > createGraphAndContractMinimalEdges(
+	private static final JavaPairRDD< HashWrapper< long[] >, Tuple2< Data, TLongArrayList > > createGraphAndContractMinimalEdges(
 			final JavaPairRDD< HashWrapper< long[] >, Data > input,
 			final Broadcast< Options > optionsBC,
 			final EdgeMerger merger,
@@ -219,14 +232,14 @@ public class BlockedRegionMergingSpark
 		return input.mapValues( data -> createGraphAndContractMinimalEdges( data, optionsBC, merger, edgeWeight, notifyGenerator, iteration ) );
 	}
 
-	public static Tuple2< Data, TLongArrayList > createGraphAndContractMinimalEdges( final Data data, final Broadcast< Options > optionsBC, final EdgeMerger merger, final EdgeWeight edgeWeight, final IntFunction< MergeNotifyWithFinishNotification > notifyGenerator, final int iteration )
+	private static Tuple2< Data, TLongArrayList > createGraphAndContractMinimalEdges( final Data data, final Broadcast< Options > optionsBC, final EdgeMerger merger, final EdgeWeight edgeWeight, final IntFunction< MergeNotifyWithFinishNotification > notifyGenerator, final int iteration )
 	{
 		final TIntHashSet nonContractingEdges = new TIntHashSet();
 		final Options opt = optionsBC.getValue();
 		data.nonContractingEdges.values().forEach( nonContractingEdges::addAll );
 		final UndirectedGraph g = new UndirectedGraph( data.edges, createNodeEdgeMap( new Edge( data.edges, edgeWeight.dataSize() ) ), edgeWeight.dataSize() );
 		final MergeNotifyWithFinishNotification notify = notifyGenerator.apply( iteration );
-		final Pair< TLongArrayList, HashMapStoreUnionFind > mergesAndMapping = RegionMerging.mergeLocallyMinimalEdges( g, merger, edgeWeight, data.counts, opt.threshold, nonContractingEdges, notify );
+		final Pair< TLongArrayList, HashMapStoreUnionFind > mergesAndMapping = RegionMerging.mergeLocallyMinimalEdges( g, merger, edgeWeight, data.counts, opt.threshold, opt.minimuMultiplicity, nonContractingEdges, notify );
 		notify.notifyDone();
 		final TLongArrayList merges = mergesAndMapping.getA();
 		final HashMapStoreUnionFind mapping = mergesAndMapping.getB();
@@ -246,12 +259,12 @@ public class BlockedRegionMergingSpark
 		return new Tuple2<>( data, merges );
 	}
 
-	public static JavaPairRDD< HashWrapper< long[] >, Data > combineSubgraphs( final JavaPairRDD< HashWrapper< long[] >, List< Data > > input, final int dataSize )
+	private static JavaPairRDD< HashWrapper< long[] >, Data > combineSubgraphs( final JavaPairRDD< HashWrapper< long[] >, List< Data > > input, final int dataSize )
 	{
 		return input.mapValues( dataList -> combineSubgraphs( dataList, dataSize ) );
 	}
 
-	public static Data combineSubgraphs( final List< Data > dataList, final int dataSize )
+	private static Data combineSubgraphs( final List< Data > dataList, final int dataSize )
 	{
 
 		final TDoubleArrayList edgeStore = new TDoubleArrayList();
@@ -293,7 +306,7 @@ public class BlockedRegionMergingSpark
 		return new Data( edgeStore, nonContractingEdges, counts );
 	}
 
-	public static JavaPairRDD< HashWrapper< long[] >, List< Data > > aggregateAsList( final JavaPairRDD< HashWrapper< long[] >, Data > remapped )
+	private static JavaPairRDD< HashWrapper< long[] >, List< Data > > aggregateAsList( final JavaPairRDD< HashWrapper< long[] >, Data > remapped )
 	{
 		final JavaPairRDD< HashWrapper< long[] >, List< Data > > aggregated = remapped.aggregateByKey( new ArrayList<>(),
 				( list, data ) -> {
