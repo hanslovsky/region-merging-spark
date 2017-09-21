@@ -171,7 +171,7 @@ public class DataPreparation
 				labelsAccess.fwd( d );
 				final long l1 = labelsCursor.get().getIntegerLong();
 				final long l2 = labelsAccess.get().getIntegerLong();
-				if ( l1 != l2 && l1 > 0 && l2 > 0 )
+				if ( l1 != l2 && l1 >= 0 && l2 >= 0 )
 					addEdge( labelsCursor.get().getIntegerLong(), labelsAccess.get().getIntegerLong(), affinity, nodeEdgeMap, creator, merger, e, dummy );
 			}
 		}
@@ -203,7 +203,7 @@ public class DataPreparation
 				labelsAccess.fwd( d );
 				final long l1 = labelsCursor.get().getIntegerLong();
 				final long l2 = labelsAccess.get().getIntegerLong();
-				if ( l1 != l2 && l1 > 0 && l2 > 0 )
+				if ( l1 != l2 && l1 >= 0 && l2 >= 0 )
 				{
 					final int edgeIndex = addEdge( labelsCursor.get().getIntegerLong(), labelsAccess.get().getIntegerLong(), affinity, nodeEdgeMap, creator, merger, e, dummy );
 					nonContractingEdges.add( edgeIndex );
@@ -317,7 +317,7 @@ public class DataPreparation
 				labelsAccess.bck( d );
 				final long l1 = labelsCursor.get().getIntegerLong();
 				final long l2 = labelsAccess.get().getIntegerLong();
-				if ( l1 != l2 && l1 > 0 && l2 > 0 )
+				if ( l1 != l2 && l1 >= 0 && l2 >= 0 )
 					addEdge( labelsCursor.get().getIntegerLong(), labelsAccess.get().getIntegerLong(), affinity, nodeEdgeMap, creator, merger, e, dummy );
 			}
 		}
@@ -349,7 +349,7 @@ public class DataPreparation
 				labelsAccess.bck( d );
 				final long l1 = labelsCursor.get().getIntegerLong();
 				final long l2 = labelsAccess.get().getIntegerLong();
-				if ( l1 != l2 && l1 > 0 && l2 > 0 )
+				if ( l1 != l2 && l1 >= 0 && l2 >= 0 )
 				{
 					final int edgeIndex = addEdge( labelsCursor.get().getIntegerLong(), labelsAccess.get().getIntegerLong(), affinity, nodeEdgeMap, creator, merger, e, dummy );
 					nonContractingEdges.add( edgeIndex );
