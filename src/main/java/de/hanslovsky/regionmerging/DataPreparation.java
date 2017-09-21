@@ -86,8 +86,6 @@ public class DataPreparation
 
 		final JavaPairRDD< HashWrapper< long[] >, Tuple2< RandomAccessibleInterval< I >, RandomAccessibleInterval< R > > > data = blocksRdd.mapToPair( blockPosition -> createRAIs( blockPosition, loaderBC ) );
 
-//		System.out.println( "after creating RAIS" + data.count() );
-
 		final JavaPairRDD< HashWrapper< long[] >, Data > graphs = data.mapToPair( positionAndData -> {
 			final Loader< I, R, LA, AA > ldr = loaderBC.getValue();
 			final long[] dim = ldr.dimensions();
@@ -123,7 +121,6 @@ public class DataPreparation
 					final long[] MM = max.clone();
 					mm[ d ] -= 1;
 					MM[ d ] = mm[ d ];
-//					System.out.println( "Adding lower: " + Arrays.toString( mm ) + " " + Arrays.toString( MM ) + " " + Arrays.toString( position ) + Arrays.toString( min ) + " " + d );
 					final TIntHashSet edgeIndices = addEdgesAcrossBorder( labels, hs, new FinalInterval( mm, MM ), d, nodeEdgeMap, creator, merger, e, dummy );
 					nonContractingEdges.put( HashWrapper.longArray( lowerPos ), edgeIndices );
 				}
@@ -132,20 +129,15 @@ public class DataPreparation
 				{
 					final long[] upperPos = position.clone();
 					upperPos[ d ] += 1;
-//					System.out.println( "WUT WUT! " + Arrays.toString( min ) + " " + Arrays.toString( max ) );
 					final long[] mm = min.clone();
 					final long[] MM = max.clone();
 					mm[ d ] = MM[ d ];
-//					System.out.println( "Adding upper: " + Arrays.toString( mm ) + " " + Arrays.toString( MM ) + " " + Arrays.toString( position ) + Arrays.toString( min ) + "  " + d );
 					final TIntHashSet edgeIndices = addEdgesAcrossBorder( labels, hs, new FinalInterval( mm, MM ), d, nodeEdgeMap, creator, merger, e, dummy );
-//					System.out.println( "Adding edge indices! " + edgeIndices );
 					nonContractingEdges.put( HashWrapper.longArray( upperPos ), edgeIndices );
 				}
 
 			}
-//			System.out.println( "Putting " + Arrays.toString( min ) + " " + Arrays.toString( max ) + " " + nonContractingEdges );
 			final Data dat = new Data( edgeStore, nonContractingEdges, counts );
-//			System.out.println( "Looking " + Arrays.toString( min ) + " " + Arrays.toString( max ) + " " + dat.nonContractingEdges() );
 
 			return new Tuple2<>( positionAndData._1(), dat );
 		} );
@@ -179,13 +171,6 @@ public class DataPreparation
 				labelsAccess.fwd( d );
 				final long l1 = labelsCursor.get().getIntegerLong();
 				final long l2 = labelsAccess.get().getIntegerLong();
-//				System.out.println( "WUT " + affinity + " " + l1 + " " + l2 );
-
-//				if ( Arrays.stream( Intervals.minAsLongArray( interval ) ).filter( m -> m > 0 ).toArray().length == 0 )
-//					System.out.println(
-//							Arrays.toString( Intervals.minAsLongArray( interval ) ) + " " +
-//									Arrays.toString( Intervals.maxAsLongArray( interval ) ) + " " +
-//									new Point( labelsCursor ) + " " + new Point( labelsAccess ) + " " + labelsCursor.get() + " " + labelsAccess.get() );
 				if ( l1 != l2 && l1 > 0 && l2 > 0 )
 					addEdge( labelsCursor.get().getIntegerLong(), labelsAccess.get().getIntegerLong(), affinity, nodeEdgeMap, creator, merger, e, dummy );
 			}
@@ -208,24 +193,9 @@ public class DataPreparation
 		final Cursor< R > affinitiesCursor = Views.interval( affinities, interval ).cursor();
 		final Cursor< I > labelsCursor = innerLabels.cursor();
 		final RandomAccess< I > labelsAccess = labels.randomAccess();
-//		System.out.println( "presenting " + Arrays.toString( Intervals.minAsLongArray( interval ) ) );
-//		for ( long y = interval.min( 1 ); y <= interval.max( 1 ); ++y )
-//		{
-//			labelsAccess.setPosition( y, 1 );
-//			for ( long x = interval.min( 0 ); x <= interval.max( 0 ); ++x )
-//			{
-//				labelsAccess.setPosition( x, 0 );
-//				System.out.print( labelsAccess.get() + " " );
-//
-//			}
-//			System.out.println( "" );
-//		}
-//		System.out.println( "Image presented by" );
-//		System.out.println( Arrays.toString( Intervals.minAsLongArray( interval ) ) + " " + Arrays.toString( Intervals.maxAsLongArray( interval ) ) + " WEEEET" );
 		while ( affinitiesCursor.hasNext() )
 		{
 			final double affinity = affinitiesCursor.next().getRealDouble();
-//			System.out.println( "WABABABABA " + affinity + new Point( affinitiesCursor ) );
 			labelsCursor.fwd();
 			if ( !Double.isNaN( affinity ) )
 			{
@@ -236,11 +206,6 @@ public class DataPreparation
 				if ( l1 != l2 && l1 > 0 && l2 > 0 )
 				{
 					final int edgeIndex = addEdge( labelsCursor.get().getIntegerLong(), labelsAccess.get().getIntegerLong(), affinity, nodeEdgeMap, creator, merger, e, dummy );
-//				if ( interval.min( 0 ) == 3 && interval.min( 1 ) == 4 )
-//					System.out.println( "WAS DA LOS EY? " +
-//							Arrays.toString( Intervals.minAsLongArray( interval ) ) + " " +
-//							Arrays.toString( Intervals.maxAsLongArray( interval ) ) + " " +
-//							new Point( labelsCursor ) + " " + new Point( labelsAccess ) + " " + labelsCursor.get() + " " + labelsAccess.get() + " " + edgeIndex );
 					nonContractingEdges.add( edgeIndex );
 				}
 			}
@@ -269,7 +234,6 @@ public class DataPreparation
 			assert toMap.contains( from ) && toMap.get( from ) == edgeIndex;
 			e.setIndex( edgeIndex );
 			creator.create( dummy, Double.NaN, affinity, from, to, 1 );
-//			System.out.println( dummy + " " + e );
 			merger.merge( dummy, e );
 			dummy.remove();
 		}
@@ -353,13 +317,6 @@ public class DataPreparation
 				labelsAccess.bck( d );
 				final long l1 = labelsCursor.get().getIntegerLong();
 				final long l2 = labelsAccess.get().getIntegerLong();
-//				System.out.println( "WUT " + affinity + " " + l1 + " " + l2 );
-
-//				if ( Arrays.stream( Intervals.minAsLongArray( interval ) ).filter( m -> m > 0 ).toArray().length == 0 )
-//					System.out.println(
-//							Arrays.toString( Intervals.minAsLongArray( interval ) ) + " " +
-//									Arrays.toString( Intervals.maxAsLongArray( interval ) ) + " " +
-//									new Point( labelsCursor ) + " " + new Point( labelsAccess ) + " " + labelsCursor.get() + " " + labelsAccess.get() );
 				if ( l1 != l2 && l1 > 0 && l2 > 0 )
 					addEdge( labelsCursor.get().getIntegerLong(), labelsAccess.get().getIntegerLong(), affinity, nodeEdgeMap, creator, merger, e, dummy );
 			}
@@ -382,24 +339,9 @@ public class DataPreparation
 		final Cursor< R > affinitiesCursor = Views.interval( affinities, interval ).cursor();
 		final Cursor< I > labelsCursor = innerLabels.cursor();
 		final RandomAccess< I > labelsAccess = labels.randomAccess();
-//		System.out.println( "presenting " + Arrays.toString( Intervals.minAsLongArray( interval ) ) );
-//		for ( long y = interval.min( 1 ); y <= interval.max( 1 ); ++y )
-//		{
-//			labelsAccess.setPosition( y, 1 );
-//			for ( long x = interval.min( 0 ); x <= interval.max( 0 ); ++x )
-//			{
-//				labelsAccess.setPosition( x, 0 );
-//				System.out.print( labelsAccess.get() + " " );
-//
-//			}
-//			System.out.println( "" );
-//		}
-//		System.out.println( "Image presented by" );
-//		System.out.println( Arrays.toString( Intervals.minAsLongArray( interval ) ) + " " + Arrays.toString( Intervals.maxAsLongArray( interval ) ) + " WEEEET" );
 		while ( affinitiesCursor.hasNext() )
 		{
 			final double affinity = affinitiesCursor.next().getRealDouble();
-//			System.out.println( "WABABABABA " + affinity + new Point( affinitiesCursor ) );
 			labelsCursor.fwd();
 			if ( !Double.isNaN( affinity ) )
 			{
@@ -410,11 +352,6 @@ public class DataPreparation
 				if ( l1 != l2 && l1 > 0 && l2 > 0 )
 				{
 					final int edgeIndex = addEdge( labelsCursor.get().getIntegerLong(), labelsAccess.get().getIntegerLong(), affinity, nodeEdgeMap, creator, merger, e, dummy );
-//				if ( interval.min( 0 ) == 3 && interval.min( 1 ) == 4 )
-//					System.out.println( "WAS DA LOS EY? " +
-//							Arrays.toString( Intervals.minAsLongArray( interval ) ) + " " +
-//							Arrays.toString( Intervals.maxAsLongArray( interval ) ) + " " +
-//							new Point( labelsCursor ) + " " + new Point( labelsAccess ) + " " + labelsCursor.get() + " " + labelsAccess.get() + " " + edgeIndex );
 					nonContractingEdges.add( edgeIndex );
 				}
 			}
@@ -440,8 +377,6 @@ public class DataPreparation
 		final Broadcast< Loader< I, R, LA, AA > > loaderBC = sc.broadcast( loader );
 
 		final JavaPairRDD< HashWrapper< long[] >, Tuple2< RandomAccessibleInterval< I >, RandomAccessibleInterval< R > > > data = blocksRdd.mapToPair( blockPosition -> createRAIs( blockPosition, loaderBC ) );
-
-//		System.out.println( "after creating RAIS" + data.count() );
 
 		final JavaPairRDD< HashWrapper< long[] >, Data > graphs = data.mapToPair( positionAndData -> {
 			final Loader< I, R, LA, AA > ldr = loaderBC.getValue();
@@ -478,7 +413,6 @@ public class DataPreparation
 					final long[] MM = max.clone();
 					mm[ d ] -= 1;
 					MM[ d ] = mm[ d ];
-//					System.out.println( "Adding lower: " + Arrays.toString( mm ) + " " + Arrays.toString( MM ) + " " + Arrays.toString( position ) + Arrays.toString( min ) + " " + d );
 					final TIntHashSet edgeIndices = addEdgesAcrossBorderPointingBackwards( labels, hs, new FinalInterval( mm, MM ), d, nodeEdgeMap, creator, merger, e, dummy );
 					nonContractingEdges.put( HashWrapper.longArray( lowerPos ), edgeIndices );
 				}
@@ -487,20 +421,15 @@ public class DataPreparation
 				{
 					final long[] upperPos = position.clone();
 					upperPos[ d ] += 1;
-//					System.out.println( "WUT WUT! " + Arrays.toString( min ) + " " + Arrays.toString( max ) );
 					final long[] mm = min.clone();
 					final long[] MM = max.clone();
 					mm[ d ] = MM[ d ];
-//					System.out.println( "Adding upper: " + Arrays.toString( mm ) + " " + Arrays.toString( MM ) + " " + Arrays.toString( position ) + Arrays.toString( min ) + "  " + d );
 					final TIntHashSet edgeIndices = addEdgesAcrossBorderPointingBackwards( labels, hs, new FinalInterval( mm, MM ), d, nodeEdgeMap, creator, merger, e, dummy );
-//					System.out.println( "Adding edge indices! " + edgeIndices );
 					nonContractingEdges.put( HashWrapper.longArray( upperPos ), edgeIndices );
 				}
 
 			}
-//			System.out.println( "Putting " + Arrays.toString( min ) + " " + Arrays.toString( max ) + " " + nonContractingEdges );
 			final Data dat = new Data( edgeStore, nonContractingEdges, counts );
-//			System.out.println( "Looking " + Arrays.toString( min ) + " " + Arrays.toString( max ) + " " + dat.nonContractingEdges() );
 
 			return new Tuple2<>( positionAndData._1(), dat );
 		} );

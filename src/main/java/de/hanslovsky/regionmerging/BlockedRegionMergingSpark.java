@@ -155,8 +155,6 @@ public class BlockedRegionMergingSpark
 
 		}
 
-//		createGraphAndContractMinimalEdges( targetRdd, optionsBC, merger, edgeWeight, mergeNotifyGenerator, iteration ).count();
-
 		if ( targetRdd != rdd )
 			targetRdd.unpersist();
 
