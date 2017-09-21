@@ -1,11 +1,11 @@
 package de.hanslovsky.regionmerging;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map.Entry;
 import java.util.Random;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.function.IntFunction;
 import java.util.stream.Stream;
 
@@ -20,12 +20,12 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import com.sun.javafx.application.PlatformImpl;
 
+import bdv.bigcat.viewer.atlas.Atlas;
+import bdv.bigcat.viewer.atlas.data.RandomAccessibleIntervalSpec;
 import bdv.img.h5.H5Utils;
-import bdv.util.BdvFunctions;
-import bdv.util.BdvOptions;
-import bdv.util.BdvStackSource;
-import bdv.viewer.DisplayMode;
+import bdv.util.Prefs;
 import de.hanslovsky.graph.edge.EdgeCreator;
 import de.hanslovsky.graph.edge.EdgeCreator.AffinityHistogram;
 import de.hanslovsky.graph.edge.EdgeMerger;
@@ -35,7 +35,6 @@ import de.hanslovsky.graph.edge.EdgeWeight.MedianAffinityWeight;
 import de.hanslovsky.regionmerging.BlockedRegionMergingSpark.Data;
 import de.hanslovsky.regionmerging.BlockedRegionMergingSpark.Options;
 import de.hanslovsky.regionmerging.DataPreparation.Loader;
-import de.hanslovsky.util.ValueDisplayListener;
 import de.hanslovsky.util.unionfind.HashMapStoreUnionFind;
 import gnu.trove.iterator.TIntObjectIterator;
 import gnu.trove.list.array.TDoubleArrayList;
@@ -44,25 +43,24 @@ import gnu.trove.map.hash.TIntObjectHashMap;
 import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongLongHashMap;
 import gnu.trove.set.hash.TIntHashSet;
+import javafx.application.Platform;
+import javafx.stage.Stage;
 import net.imglib2.RandomAccessible;
 import net.imglib2.RandomAccessibleInterval;
-import net.imglib2.RealRandomAccess;
 import net.imglib2.cache.img.CellLoader;
 import net.imglib2.converter.Converter;
 import net.imglib2.converter.Converters;
-import net.imglib2.converter.RealARGBConverter;
+import net.imglib2.converter.TypeIdentity;
 import net.imglib2.img.array.ArrayImgs;
 import net.imglib2.img.basictypeaccess.array.FloatArray;
 import net.imglib2.img.basictypeaccess.array.LongArray;
 import net.imglib2.img.cell.CellImg;
-import net.imglib2.interpolation.randomaccess.NearestNeighborInterpolatorFactory;
 import net.imglib2.type.Type;
 import net.imglib2.type.numeric.ARGBType;
 import net.imglib2.type.numeric.integer.LongType;
 import net.imglib2.type.numeric.real.FloatType;
 import net.imglib2.util.Intervals;
 import net.imglib2.util.Pair;
-import net.imglib2.view.IntervalView;
 import net.imglib2.view.Views;
 import net.imglib2.view.composite.RealComposite;
 
@@ -73,10 +71,29 @@ public class RegionMergingExample
 
 	public static void main( final String[] args )
 	{
-		final String path = HOME_DIR + "/Downloads/excerpt.h5";
-//		final String path = HOME_DIR + "/local/tmp/data-jan.h5";
-		final CellImg< FloatType, ? > input = H5Utils.loadFloat( path, "main", new int[] { 300, 300, 100, 3 } );
-		System.out.println( "Loaded affinities from " + path + "/main" );
+//		final String affinitiesFile = HOME_DIR + "/Downloads/excerpt.h5";
+//		final String affinitiesPath = "main";
+//		final String superVoxelFile = affinitiesFile;
+//		final String superVoxelPath = "zws";
+//		final int[] affinitiesChunkSize = { 300, 300, 100, 3 };
+//		final int[] superVoxelChunkSize = { 300, 300, 100 };
+
+//		final String affinitiesFile = HOME_DIR + "/local/tmp/data-jan/raw-and-affinities.h5";
+//		final String affinitiesPath = "volumes/predicted_affs";
+//		final String superVoxelFile = HOME_DIR + "/local/tmp/data-jan/labels.h5";
+//		final String superVoxelPath = "volumes/labels/neuron_ids";
+//		final int[] affinitiesChunkSize = { 1461, 1578, 63, 3 };
+//		final int[] superVoxelChunkSize = { 84, 90, 2 };
+
+		final String affinitiesFile = HOME_DIR + "/local/tmp/data-jan/cutout.h5";
+		final String affinitiesPath = "aff";
+		final String superVoxelFile = affinitiesFile;
+		final String superVoxelPath = "seg";
+		final int[] affinitiesChunkSize = { 500, 500, 63, 3 };
+		final int[] superVoxelChunkSize = { 500, 500, 63 };
+
+		final CellImg< FloatType, ? > input = H5Utils.loadFloat( affinitiesFile, affinitiesPath, affinitiesChunkSize );
+		System.out.println( "Loaded affinities from " + affinitiesFile + "/" + affinitiesFile );
 		final RandomAccessibleInterval< FloatType > affs = ArrayImgs.floats( Intervals.dimensionsAsLongArray( input ) );
 
 		final int[] perm = getFlipPermutation( input.numDimensions() - 1 );
@@ -85,21 +102,53 @@ public class RegionMergingExample
 		for ( final Pair< FloatType, FloatType > p : Views.interval( Views.pair( inputPerm, affs ), affs ) )
 			p.getB().set( p.getA() );
 
-		final RandomAccessibleInterval< LongType > labels = H5Utils.loadUnsignedLong( path, "zws", new int[] { 300, 300, 10 } );
-		System.out.println( "Loaded labels from " + path + "/zws" );
+		for ( int d = 0; d < 3; ++d )
+			for ( final RealComposite< FloatType > aff : Views.hyperSlice( Views.collapseReal( affs ), d, 0l ) )
+				aff.get( d ).set( Float.NaN );
+
+		final RandomAccessibleInterval< LongType > labels = H5Utils.loadUnsignedLong( superVoxelFile, superVoxelPath, superVoxelChunkSize );
+		System.out.println( "Loaded labels from " + superVoxelFile + "/" + superVoxelPath );
 
 
 		final Random rng = new Random( 100 );
 		final TLongIntHashMap colors = new TLongIntHashMap();
 		for ( final LongType l : Views.flatIterable( labels ) )
 			if ( !colors.contains( l.get() ) )
-				colors.put( l.get(), rng.nextInt() );
+			{
+				final int r = rng.nextInt( 255 );// + 255 - 100;
+				final int g = rng.nextInt( 255 );// + 255 - 100;
+				final int b = rng.nextInt( 255 );// + 255 - 100;
+				colors.put( l.get(), 0xff << 24 | r << 16 | g << 8 | b << 0 );
+			}
 		colors.put( 0, 0 );
 
-		final BdvStackSource< ARGBType > bdv = BdvFunctions.show( Converters.convert( Views.collapseReal( affs ), ( s, t ) -> {
-			t.set( ARGBType.rgba( 255 * s.get( 0 ).get(), 255 * s.get( 1 ).get(), 255 * s.get( 2 ).get(), 1.0 ) );
-		}, new ARGBType() ), "affinity", BdvOptions.options() );
+		final RandomAccessibleInterval< ARGBType > rgbAffs = Converters.convert( Views.collapseReal( affs ), ( s, t ) -> {
+			t.set( ARGBType.rgba( 255 * ( 1 - s.get( 0 ).get() ), 255 * ( 1 - s.get( 1 ).get() ), 255 * ( 1 - s.get( 2 ).get() ), 255.0 ) );
+		}, new ARGBType() );
 		final double factor = 1.0;// 0.52;
+
+		final double[][] resolution = { { 1.0, 1.0, 10.0 } };
+
+		Prefs.showMultibox( false );
+		Prefs.showTextOverlay( false );
+
+		final Converter< LongType, ARGBType > colorConv = ( s, t ) -> {
+			t.set( colors.get( s.get() ) );
+		};
+
+		PlatformImpl.startup( () -> {} );
+		final Atlas atlas = new Atlas( labels );
+		Platform.runLater( () -> {
+			final Stage stage = new Stage();
+			atlas.start( stage );
+			stage.show();
+			final RandomAccessibleIntervalSpec< ARGBType, ARGBType > spec = new RandomAccessibleIntervalSpec<>( new TypeIdentity<>(), new RandomAccessibleInterval[] { rgbAffs }, new RandomAccessibleInterval[] { rgbAffs }, resolution, null, "affs" );
+			atlas.addARGB( spec );
+
+			final RandomAccessibleInterval< ARGBType > colored = Converters.convert( labels, colorConv, new ARGBType() );
+			final RandomAccessibleIntervalSpec< ?, ARGBType > voxelSpec = new RandomAccessibleIntervalSpec<>( new TypeIdentity<>(), new RandomAccessibleInterval[] { labels }, new RandomAccessibleInterval[] { colored }, resolution, null, "super voxels " );
+			atlas.addARGB( voxelSpec );
+		} );
 //		for ( final FloatType a : Views.hyperSlice( affs, 3, 2l ) )
 //			a.mul( factor );
 //
@@ -111,25 +160,14 @@ public class RegionMergingExample
 //			}
 //		}
 
-		{
-			final IntervalView< FloatType > hs = Views.hyperSlice( affs, 3, 2l );
-			final BdvStackSource< ARGBType > wargs = BdvFunctions.show( Converters.convert( ( RandomAccessibleInterval< FloatType > ) hs, new RealARGBConverter<>( 0.0, factor ), new ARGBType() ), "affs-z-only" );
-			final ValueDisplayListener vdl = new ValueDisplayListener( wargs.getBdvHandle().getViewerPanel() );
-			vdl.addSource( wargs.getSources().get( 0 ).getSpimSource(), Views.interpolate( Views.extendValue( hs, new FloatType( 0.0f ) ), new NearestNeighborInterpolatorFactory<>() ).realRandomAccess(), f -> f.toString() );
-		}
-
 		final RealComposite< FloatType > extension = Views.collapseReal( ArrayImgs.floats( new float[ affs.numDimensions() ], 1, affs.numDimensions() ) ).randomAccess().get();
 
-		final RealRandomAccess< RealComposite< FloatType > > rra = Views.interpolate( Views.extendValue( Views.collapseReal( affs ), extension ), new NearestNeighborInterpolatorFactory<>() ).realRandomAccess();
-		final ValueDisplayListener vdl = new ValueDisplayListener( bdv.getBdvHandle().getViewerPanel() );
-		final Function< RealComposite< FloatType >, String > ts = ( Function< RealComposite< FloatType >, String > ) col -> String.format( "(%.3f,%.3f,%.3f)", col.get( 0 ).get(), col.get( 1 ).get(), col.get( 2 ).get() );
-		vdl.addSource( bdv.getSources().get( 0 ).getSpimSource(), rra, ts );
-
-		final Converter< LongType, ARGBType > colorConv = ( s, t ) -> {
-			t.set( colors.get( s.get() ) );
-		};
-		final BdvStackSource< ARGBType > bdvLabels = BdvFunctions.show( Converters.convert( labels, colorConv, new ARGBType() ), "labels", BdvOptions.options().addTo( bdv ) );
-		vdl.addSource( bdvLabels.getSources().get( 0 ).getSpimSource(), Views.interpolate( Views.extendValue( labels, new LongType( -1 ) ), new NearestNeighborInterpolatorFactory<>() ).realRandomAccess(), v -> v.toString() );
+//		final RealRandomAccess< RealComposite< FloatType > > rra = Views.interpolate( Views.extendValue( Views.collapseReal( affs ), extension ), new NearestNeighborInterpolatorFactory<>() ).realRandomAccess();
+//		final ValueDisplayListener vdl = new ValueDisplayListener( bdv.getBdvHandle().getViewerPanel() );
+//		final Function< RealComposite< FloatType >, String > ts = ( Function< RealComposite< FloatType >, String > ) col -> String.format( "(%.3f,%.3f,%.3f)", col.get( 0 ).get(), col.get( 1 ).get(), col.get( 2 ).get() );
+//		vdl.addSource( bdv.getSources().get( 0 ).getSpimSource(), rra, ts );
+//		final BdvStackSource< ARGBType > bdvLabels = BdvFunctions.show( Converters.convert( labels, colorConv, new ARGBType() ), "labels", BdvOptions.options().addTo( bdv ) );
+//		vdl.addSource( bdvLabels.getSources().get( 0 ).getSpimSource(), Views.interpolate( Views.extendValue( labels, new LongType( -1 ) ), new NearestNeighborInterpolatorFactory<>() ).realRandomAccess(), v -> v.toString() );
 
 		final int nBins = 256;
 		final AffinityHistogram creator = new EdgeCreator.AffinityHistogram( nBins, 0.0, 1.0 );
@@ -141,7 +179,7 @@ public class RegionMergingExample
 //		final EdgeWeight edgeWeight = new EdgeWeight.OneMinusAffinity();
 
 		final long[] dimensions = Intervals.dimensionsAsLongArray( labels );
-		final int[] blockSize = { 300, 300, 1 };
+		final int[] blockSize = { ( int ) dimensions[ 0 ], ( int ) dimensions[ 1 ], 3 };
 
 		final CellLoader< LongType > ll = cell -> {
 			burnIn( labels, cell );
@@ -159,7 +197,7 @@ public class RegionMergingExample
 
 		final JavaSparkContext sc = new JavaSparkContext( conf );
 
-		final JavaPairRDD< HashWrapper< long[] >, Data > graph = DataPreparation.createGraph( sc, new FloatAndLongLoader( dimensions, blockSize, ll, al ), creator, merger );
+		final JavaPairRDD< HashWrapper< long[] >, Data > graph = DataPreparation.createGraphPointingBackwards( sc, new FloatAndLongLoader( dimensions, blockSize, ll, al ), creator, merger );
 		graph.cache();
 		final long nBlocks = graph.count();
 		System.out.println( "Starting with " + nBlocks + " blocks." );
@@ -224,16 +262,24 @@ public class RegionMergingExample
 //				uf.join( r1, r2 );
 //		}
 
-		for ( int i = 0; i < ufs.length; ++i )
+		final ArrayList< RandomAccessibleIntervalSpec< LongType, ARGBType > > raiSpecs = new ArrayList<>();
+
+		for ( int i = ufs.length - 1; i < ufs.length; ++i )
 		{
 			final HashMapStoreUnionFind uf = ufs[ i ];
 			final RandomAccessibleInterval< LongType > firstJoined = Converters.convert( labels, ( s, t ) -> {
 				t.set( uf.findRoot( s.get() ) );
 			}, new LongType() );
-			final BdvStackSource< ARGBType > bdvIter = BdvFunctions.show( Converters.convert( firstJoined, colorConv, new ARGBType() ), "after iteration " + i, BdvOptions.options().addTo( bdv ) );
-			vdl.addSource( bdvIter.getSources().get( 0 ).getSpimSource(), Views.interpolate( Views.extendValue( firstJoined, new LongType( -1 ) ), new NearestNeighborInterpolatorFactory<>() ).realRandomAccess(), v -> v.toString() );
+			final RandomAccessibleInterval< ARGBType > colored = Converters.convert( firstJoined, colorConv, new ARGBType() );
+			raiSpecs.add( new RandomAccessibleIntervalSpec<>( new TypeIdentity<>(), new RandomAccessibleInterval[] { firstJoined }, new RandomAccessibleInterval[] { colored }, resolution, null, "iteratrion " + i ) );
 		}
-		bdv.getBdvHandle().getViewerPanel().setDisplayMode( DisplayMode.SINGLE );
+
+		Platform.runLater( () -> {
+			raiSpecs.forEach( atlas::addARGB );
+		} );
+
+
+
 	}
 
 	public static class FloatAndLongLoader implements Loader< LongType, FloatType, LongArray, FloatArray >
