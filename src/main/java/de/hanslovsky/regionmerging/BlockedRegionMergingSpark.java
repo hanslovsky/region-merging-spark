@@ -67,17 +67,39 @@ public class BlockedRegionMergingSpark
 
 	public static class Options
 	{
-		private final double threshold;
+		private double threshold;
 
-		private final StorageLevel persistenceLevel;
+		private StorageLevel persistenceLevel;
 
 		private final int minimuMultiplicity = 0;
+
+		public static Options options()
+		{
+			return new Options( 1.0, StorageLevel.MEMORY_ONLY() );
+		}
 
 		public Options( final double threshold, final StorageLevel persistenceLevel )
 		{
 			super();
 			this.threshold = threshold;
 			this.persistenceLevel = persistenceLevel;
+		}
+
+		public Options copy()
+		{
+			return new Options( threshold, persistenceLevel.clone() );
+		}
+
+		public Options threshold( final double threshold )
+		{
+			this.threshold = threshold;
+			return this;
+		}
+
+		public Options persistenceLevel( final StorageLevel persistenceLevel )
+		{
+			this.persistenceLevel = persistenceLevel;
+			return this;
 		}
 	}
 
