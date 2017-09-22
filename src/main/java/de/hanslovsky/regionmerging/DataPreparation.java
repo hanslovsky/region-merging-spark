@@ -24,6 +24,7 @@ import gnu.trove.set.hash.TIntHashSet;
 import net.imglib2.Cursor;
 import net.imglib2.FinalInterval;
 import net.imglib2.Interval;
+import net.imglib2.IterableInterval;
 import net.imglib2.RandomAccess;
 import net.imglib2.RandomAccessible;
 import net.imglib2.RandomAccessibleInterval;
@@ -320,9 +321,9 @@ public class DataPreparation
 	}
 
 	public static < I extends IntegerType< I >, R extends RealType< R > > TIntHashSet addEdgesAcrossBorderPointingBackwards(
-			final RandomAccessible< I > labels,
-			final RandomAccessible< R > affinities,
-			final Interval interval,
+			final IterableInterval< I > innerLabels,
+			final IterableInterval< I > outerLabels,
+			final IterableInterval< R > affinities,
 			final int d,
 			final TLongObjectHashMap< TLongIntHashMap > nodeEdgeMap,
 			final EdgeCreator creator,
@@ -331,18 +332,16 @@ public class DataPreparation
 			final Edge dummy )
 	{
 		final TIntHashSet nonContractingEdges = new TIntHashSet();
-		final IntervalView< I > innerLabels = Views.interval( labels, interval );
-		final Cursor< R > affinitiesCursor = Views.interval( affinities, interval ).cursor();
+		final Cursor< R > affinitiesCursor = affinities.cursor();
 		final Cursor< I > labelsCursor = innerLabels.cursor();
-		final RandomAccess< I > labelsAccess = labels.randomAccess();
+		final Cursor< I > labelsAccess = outerLabels.cursor();
 		while ( affinitiesCursor.hasNext() )
 		{
 			final double affinity = affinitiesCursor.next().getRealDouble();
 			labelsCursor.fwd();
+			labelsAccess.fwd();
 			if ( !Double.isNaN( affinity ) )
 			{
-				labelsAccess.setPosition( labelsCursor );
-				labelsAccess.bck( d );
 				final long l1 = labelsCursor.get().getIntegerLong();
 				final long l2 = labelsAccess.get().getIntegerLong();
 				if ( l1 != l2 && l1 >= 0 && l2 >= 0 )
@@ -382,7 +381,7 @@ public class DataPreparation
 
 			final long[] min = IntStream.range( 0, nDim ).mapToLong( d -> Math.max( position[ d ] * bs[ d ], 0 ) ).toArray();
 			final long[] max = IntStream.range( 0, nDim ).mapToLong( d -> Math.min( min[ d ] + bs[ d ], dim[ d ] ) - 1 ).toArray();
-			final long[] innerMax = IntStream.range( 0, nDim ).mapToLong( d -> Math.min( min[ d ] + bs[ d ] - 1, dim[ d ] - 1 ) - 1 ).toArray();
+			final long[] innerMin = IntStream.range( 0, nDim ).mapToLong( d -> Math.max( min[ d ], 0 ) + 1 ).toArray();
 
 			final RandomAccessibleInterval< I > labels = positionAndData._2()._1();
 			final RandomAccessibleInterval< R > affinities = positionAndData._2()._2();
@@ -396,10 +395,10 @@ public class DataPreparation
 
 			for ( int d = 0; d < nDim; ++d )
 			{
-				final long[] currentMax = max.clone();
-				currentMax[ d ] = innerMax[ d ];
+				final long[] currentMin = min.clone();
+				currentMin[ d ] = innerMin[ d ];
 				final IntervalView< R > hs = Views.hyperSlice( affinities, nDim, ( long ) d );
-				addEdgesPointingBackwards( labels, hs, new FinalInterval( min, currentMax ), d, nodeEdgeMap, creator, merger, e, dummy );
+				addEdgesPointingBackwards( labels, hs, new FinalInterval( currentMin, max ), d, nodeEdgeMap, creator, merger, e, dummy );
 
 				if ( min[ d ] > 0 )
 				{
@@ -407,9 +406,17 @@ public class DataPreparation
 					lowerPos[ d ] -= 1;
 					final long[] mm = min.clone();
 					final long[] MM = max.clone();
-					mm[ d ] -= 1;
 					MM[ d ] = mm[ d ];
-					final TIntHashSet edgeIndices = addEdgesAcrossBorderPointingBackwards( labels, hs, new FinalInterval( mm, MM ), d, nodeEdgeMap, creator, merger, e, dummy );
+
+					final Interval interval = new FinalInterval( mm, MM );
+					final long[] translation = new long[ mm.length ];
+					translation[ d ] = 1;
+
+					final IntervalView< I > innerLabels = Views.interval( labels, interval );
+					final IntervalView< I > outerLabels = Views.interval( Views.translate( labels, translation ), interval );
+					final IntervalView< R > correctAffinities = Views.interval( hs, interval );
+
+					final TIntHashSet edgeIndices = addEdgesAcrossBorderPointingBackwards( innerLabels, outerLabels, correctAffinities, d, nodeEdgeMap, creator, merger, e, dummy );
 					nonContractingEdges.put( HashWrapper.longArray( lowerPos ), edgeIndices );
 				}
 
@@ -420,7 +427,15 @@ public class DataPreparation
 					final long[] mm = min.clone();
 					final long[] MM = max.clone();
 					mm[ d ] = MM[ d ];
-					final TIntHashSet edgeIndices = addEdgesAcrossBorderPointingBackwards( labels, hs, new FinalInterval( mm, MM ), d, nodeEdgeMap, creator, merger, e, dummy );
+
+					final Interval interval = new FinalInterval( mm, MM );
+					final long[] translation = new long[ mm.length ];
+					translation[ d ] = -1;
+					final IntervalView< I > innerLabels = Views.interval( labels, interval );
+					final IntervalView< I > outerLabels = Views.interval( Views.translate( labels, translation ), interval );
+					final IntervalView< R > correctAffinities = Views.interval( Views.translate( hs, translation ), interval );
+
+					final TIntHashSet edgeIndices = addEdgesAcrossBorderPointingBackwards( innerLabels, outerLabels, correctAffinities, d, nodeEdgeMap, creator, merger, e, dummy );
 					nonContractingEdges.put( HashWrapper.longArray( upperPos ), edgeIndices );
 				}
 
