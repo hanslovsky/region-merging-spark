@@ -244,6 +244,8 @@ public class BlockedRegionMergingSpark
 		final HashWrapper< long[] > hashedKey = new HashWrapper<>( key, t._1().getHash(), t._1().getEquals() );
 		final Data data = t._2();
 		final HashMap< HashWrapper< long[] >, TIntHashSet > nonContractingEdges = new HashMap<>();
+		// keep non-contracting edges when not in the same block (after
+		// adjusting coordinates)
 		data.nonContractingEdges.forEach( ( k, v ) -> {
 			final long[] adjustedKey = adjustPosition( k.getData(), factor );
 			if ( !Arrays.equals( adjustedKey, key ) )
@@ -308,12 +310,16 @@ public class BlockedRegionMergingSpark
 
 			counts.putAll( d.counts );
 
+			// invert mapping such that we can check if edge is non-contracting
+			// more easily
 			final TIntObjectHashMap< HashWrapper< long[] > > inverseNonContractingEdges = new TIntObjectHashMap<>();
 			d.nonContractingEdges.forEach( ( k, v ) -> v.forEach( edgeIndex -> {
 				inverseNonContractingEdges.put( edgeIndex, k );
 				return true;
 			} ) );
 
+			// copy old edges into new edge list, and add to non-contracting
+			// edges if applicable
 			final Edge oldEdge = new Edge( d.edges, dataSize );
 			for ( int i = 0; i < oldEdge.size(); ++i )
 			{
