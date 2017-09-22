@@ -306,7 +306,7 @@ public class BlockedRegionMergingSpark
 		for ( final Data d : dataList )
 		{
 
-			counts.putAll( counts );
+			counts.putAll( d.counts );
 
 			final TIntObjectHashMap< HashWrapper< long[] > > inverseNonContractingEdges = new TIntObjectHashMap<>();
 			d.nonContractingEdges.forEach( ( k, v ) -> v.forEach( edgeIndex -> {
