@@ -101,6 +101,16 @@ public class BlockedRegionMergingSpark
 			this.persistenceLevel = persistenceLevel;
 			return this;
 		}
+
+		public StorageLevel persistenceLevel()
+		{
+			return this.persistenceLevel.clone();
+		}
+
+		public double threshold()
+		{
+			return this.threshold;
+		}
 	}
 
 	public static interface MergeHandlerFactory
