@@ -6,7 +6,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.function.Function;
 import java.util.stream.IntStream;
-import java.util.stream.LongStream;
 
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
@@ -49,9 +48,9 @@ public class DataPreparation
 	public static interface Loader< LabelType extends NativeType< LabelType >, AffinityType extends NativeType< AffinityType >, LabelAccess, AffinityAccess >
 	{
 
-		public long[] dimensions();
+		public CellGrid labelGrid();
 
-		public int[] blockSize();
+		public CellGrid affinitiesGrid();
 
 		public CellLoader< LabelType > labelLoader();
 
@@ -72,11 +71,11 @@ public class DataPreparation
 			final JavaSparkContext sc,
 			final Loader< I, R, LA, AA > loader,
 			final EdgeCreator creator,
-			final EdgeMerger merger )
+			final EdgeMerger merger,
+			final int[] blockSize )
 	{
-		final long[] dimensions = loader.dimensions();
+		final long[] dimensions = loader.labelGrid().getImgDimensions();
 		final int nDim = dimensions.length;
-		final int[] blockSize = loader.blockSize();
 
 		final List< HashWrapper< long[] > > blocks = collectAllOffsets( dimensions, blockSize, offset -> HashWrapper.longArray( IntStream.range( 0, nDim ).mapToLong( d -> offset[ d ] / blockSize[ d ] ).toArray() ) );
 
@@ -88,9 +87,9 @@ public class DataPreparation
 
 		final JavaPairRDD< HashWrapper< long[] >, Data > graphs = data.mapToPair( positionAndData -> {
 			final Loader< I, R, LA, AA > ldr = loaderBC.getValue();
-			final long[] dim = ldr.dimensions();
+			final long[] dim = ldr.labelGrid().getImgDimensions();
 			final long[] position = positionAndData._1().getData();
-			final int[] bs = ldr.blockSize();
+			final int[] bs = blockSize;
 
 			final long[] min = IntStream.range( 0, nDim ).mapToLong( d -> Math.max( position[ d ] * bs[ d ], 0 ) ).toArray();
 			final long[] max = IntStream.range( 0, nDim ).mapToLong( d -> Math.min( min[ d ] + bs[ d ], dim[ d ] ) - 1 ).toArray();
@@ -276,12 +275,9 @@ public class DataPreparation
 		final Loader< I, R, LA, AA > ldr = loaderBC.getValue();
 		final CellLoader< I > labelLoader = loaderBC.getValue().labelLoader();
 		final CellLoader< R > affinitiesLoader = loaderBC.getValue().affinitiesLoader();
-		final long[] dim = loaderBC.getValue().dimensions();
-		final int[] bs = loaderBC.getValue().blockSize();
-		final int nDim = dim.length;
 
-		final CellGrid labelsGrid = new CellGrid( dim, bs );
-		final CellGrid affinitiesGrid = new CellGrid( LongStream.concat( LongStream.of( dim ), LongStream.of( nDim ) ).toArray(), IntStream.concat( IntStream.of( bs ), IntStream.of( nDim ) ).toArray() );
+		final CellGrid labelsGrid = loaderBC.getValue().labelGrid();
+		final CellGrid affinitiesGrid = loaderBC.getValue().affinitiesGrid();
 
 		final Cache< Long, Cell< LA > > labelCache = new SoftRefLoaderCache< Long, Cell< LA > >().withLoader( LoadedCellCacheLoader.get( labelsGrid, labelLoader, ldr.labelType() ) );
 		final Cache< Long, Cell< AA > > affinitiesCache = new SoftRefLoaderCache< Long, Cell< AA > >().withLoader( LoadedCellCacheLoader.get( affinitiesGrid, affinitiesLoader, ldr.affinityType() ) );
@@ -364,11 +360,11 @@ public class DataPreparation
 			final JavaSparkContext sc,
 			final Loader< I, R, LA, AA > loader,
 			final EdgeCreator creator,
-			final EdgeMerger merger )
+			final EdgeMerger merger,
+			final int[] blockSize )
 	{
-		final long[] dimensions = loader.dimensions();
+		final long[] dimensions = loader.labelGrid().getImgDimensions();
 		final int nDim = dimensions.length;
-		final int[] blockSize = loader.blockSize();
 
 		final List< HashWrapper< long[] > > blocks = collectAllOffsets( dimensions, blockSize, offset -> HashWrapper.longArray( IntStream.range( 0, nDim ).mapToLong( d -> offset[ d ] / blockSize[ d ] ).toArray() ) );
 
@@ -380,9 +376,9 @@ public class DataPreparation
 
 		final JavaPairRDD< HashWrapper< long[] >, Data > graphs = data.mapToPair( positionAndData -> {
 			final Loader< I, R, LA, AA > ldr = loaderBC.getValue();
-			final long[] dim = ldr.dimensions();
+			final long[] dim = ldr.labelGrid().getImgDimensions();
 			final long[] position = positionAndData._1().getData();
-			final int[] bs = ldr.blockSize();
+			final int[] bs = blockSize;
 
 			final long[] min = IntStream.range( 0, nDim ).mapToLong( d -> Math.max( position[ d ] * bs[ d ], 0 ) ).toArray();
 			final long[] max = IntStream.range( 0, nDim ).mapToLong( d -> Math.min( min[ d ] + bs[ d ], dim[ d ] ) - 1 ).toArray();

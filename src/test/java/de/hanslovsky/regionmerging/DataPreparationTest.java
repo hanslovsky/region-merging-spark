@@ -52,6 +52,7 @@ import net.imglib2.img.array.ArrayImg;
 import net.imglib2.img.array.ArrayImgs;
 import net.imglib2.img.basictypeaccess.array.DoubleArray;
 import net.imglib2.img.basictypeaccess.array.LongArray;
+import net.imglib2.img.cell.CellGrid;
 import net.imglib2.type.Type;
 import net.imglib2.type.numeric.integer.LongType;
 import net.imglib2.type.numeric.real.DoubleType;
@@ -92,7 +93,7 @@ public class DataPreparationTest
 		final TestLoader loader = new TestLoader( dimensions, blockSize, labelLoader, affinitiesLoader );
 
 
-		final List< Tuple2< HashWrapper< long[] >, Data > > graph = DataPreparation.createGraph( sc, loader, new EdgeCreator.NoDataSerializableCreator(), new EdgeMerger.MAX_AFFINITY_MERGER() ).collect();
+		final List< Tuple2< HashWrapper< long[] >, Data > > graph = DataPreparation.createGraph( sc, loader, new EdgeCreator.NoDataSerializableCreator(), new EdgeMerger.MAX_AFFINITY_MERGER(), blockSize ).collect();
 
 
 		final long[][] blockMinima = DataPreparation.collectAllOffsets( dimensions, blockSize, Function.identity() ).stream().toArray( long[][]::new );
@@ -232,7 +233,7 @@ public class DataPreparationTest
 		final NoDataSerializableCreator creator = new EdgeCreator.NoDataSerializableCreator();
 		final MAX_AFFINITY_MERGER merger = new EdgeMerger.MAX_AFFINITY_MERGER();
 
-		final Map< HashWrapper< long[] >, Data > graph = DataPreparation.createGraph( sc, loader, creator, merger ).collectAsMap();
+		final Map< HashWrapper< long[] >, Data > graph = DataPreparation.createGraph( sc, loader, creator, merger, Arrays.stream( blockSize ).mapToInt( l -> ( int ) l ).toArray() ).collectAsMap();
 
 		final Data leftSubgraph = graph.get( keys[ 0 ] );
 		final Data rightSubgraph = graph.get( keys[ 1 ] );
@@ -370,18 +371,6 @@ public class DataPreparationTest
 		}
 
 		@Override
-		public long[] dimensions()
-		{
-			return dimensions;
-		}
-
-		@Override
-		public int[] blockSize()
-		{
-			return blockSize;
-		}
-
-		@Override
 		public CellLoader< LongType > labelLoader()
 		{
 			return labelLoader;
@@ -415,6 +404,24 @@ public class DataPreparationTest
 		public DoubleArray affinityAccess()
 		{
 			return new DoubleArray( 0 );
+		}
+
+		@Override
+		public CellGrid labelGrid()
+		{
+			return new CellGrid( dimensions, blockSize );
+		}
+
+		@Override
+		public CellGrid affinitiesGrid()
+		{
+			final long[] d = new long[ dimensions.length + 1 ];
+			final int[] b = new int[ dimensions.length + 1 ];
+			System.arraycopy( dimensions, 0, d, 0, dimensions.length );
+			System.arraycopy( blockSize, 0, b, 0, blockSize.length );
+			d[ dimensions.length ] = dimensions.length;
+			b[ dimensions.length ] = dimensions.length;
+			return new CellGrid( d, b );
 		}
 
 	}
