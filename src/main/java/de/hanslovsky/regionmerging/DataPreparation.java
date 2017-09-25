@@ -333,20 +333,20 @@ public class DataPreparation
 	{
 		final TIntHashSet nonContractingEdges = new TIntHashSet();
 		final Cursor< R > affinitiesCursor = affinities.cursor();
-		final Cursor< I > labelsCursor = innerLabels.cursor();
-		final Cursor< I > labelsAccess = outerLabels.cursor();
+		final Cursor< I > innerCursor = innerLabels.cursor();
+		final Cursor< I > outerCursor = outerLabels.cursor();
 		while ( affinitiesCursor.hasNext() )
 		{
 			final double affinity = affinitiesCursor.next().getRealDouble();
-			labelsCursor.fwd();
-			labelsAccess.fwd();
+			innerCursor.fwd();
+			outerCursor.fwd();
 			if ( !Double.isNaN( affinity ) )
 			{
-				final long l1 = labelsCursor.get().getIntegerLong();
-				final long l2 = labelsAccess.get().getIntegerLong();
+				final long l1 = innerCursor.get().getIntegerLong();
+				final long l2 = outerCursor.get().getIntegerLong();
 				if ( l1 != l2 && l1 >= 0 && l2 >= 0 )
 				{
-					final int edgeIndex = addEdge( labelsCursor.get().getIntegerLong(), labelsAccess.get().getIntegerLong(), affinity, nodeEdgeMap, creator, merger, e, dummy );
+					final int edgeIndex = addEdge( innerCursor.get().getIntegerLong(), outerCursor.get().getIntegerLong(), affinity, nodeEdgeMap, creator, merger, e, dummy );
 					nonContractingEdges.add( edgeIndex );
 				}
 			}
