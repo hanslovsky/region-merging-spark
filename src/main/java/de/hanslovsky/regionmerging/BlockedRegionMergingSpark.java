@@ -217,6 +217,9 @@ public class BlockedRegionMergingSpark
 				final TLongIntHashMap fromMap = nodeEdgeMap.get( from );
 				final TLongIntHashMap toMap = nodeEdgeMap.get( to );
 
+				if ( e.from() == 79 && e.to() == 290 || e.from() == 290 && e.to() == 79 )
+					System.out.println( "THIS EDGE IS OF IMPORTANCE! " + e );
+
 				if ( fromMap.contains( to ) )
 				{
 					assert toMap.contains( from ): "Map inconsistency!";
