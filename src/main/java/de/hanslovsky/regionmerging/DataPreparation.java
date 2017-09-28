@@ -1,7 +1,6 @@
 package de.hanslovsky.regionmerging;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.function.Function;
@@ -463,14 +462,4 @@ public class DataPreparation
 			return data;
 		} );
 	}
-
-	public static void main( final String[] args )
-	{
-		final long[] dimensions = { 3, 3, 4 };
-		final int[] blockSize = { 2, 2, 2 };
-		final List< String > offsets = collectAllOffsets( dimensions, blockSize, ( Function< long[], String > ) offset -> Arrays.toString( offset ) );
-		System.out.println( offsets );
-		System.out.println( offsets.size() );
-	}
-
 }
