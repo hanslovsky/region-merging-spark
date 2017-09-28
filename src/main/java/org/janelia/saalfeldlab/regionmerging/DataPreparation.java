@@ -1,4 +1,4 @@
-package de.hanslovsky.regionmerging;
+package org.janelia.saalfeldlab.regionmerging;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -10,11 +10,11 @@ import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.broadcast.Broadcast;
+import org.janelia.saalfeldlab.graph.edge.Edge;
+import org.janelia.saalfeldlab.graph.edge.EdgeCreator;
+import org.janelia.saalfeldlab.graph.edge.EdgeMerger;
+import org.janelia.saalfeldlab.regionmerging.BlockedRegionMergingSpark.Data;
 
-import de.hanslovsky.graph.edge.Edge;
-import de.hanslovsky.graph.edge.EdgeCreator;
-import de.hanslovsky.graph.edge.EdgeMerger;
-import de.hanslovsky.regionmerging.BlockedRegionMergingSpark.Data;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongLongHashMap;

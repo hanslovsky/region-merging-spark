@@ -1,4 +1,4 @@
-package de.hanslovsky.regionmerging;
+package org.janelia.saalfeldlab.regionmerging;
 
 import java.util.Arrays;
 import java.util.function.BiPredicate;

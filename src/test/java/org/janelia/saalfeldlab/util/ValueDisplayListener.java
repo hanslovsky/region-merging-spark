@@ -1,4 +1,4 @@
-package de.hanslovsky.util;
+package org.janelia.saalfeldlab.util;
 
 import java.awt.AlphaComposite;
 import java.awt.Color;

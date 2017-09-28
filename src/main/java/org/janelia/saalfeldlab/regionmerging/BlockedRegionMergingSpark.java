@@ -1,4 +1,4 @@
-package de.hanslovsky.regionmerging;
+package org.janelia.saalfeldlab.regionmerging;
 
 import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
@@ -12,14 +12,16 @@ import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.broadcast.Broadcast;
 import org.apache.spark.storage.StorageLevel;
+import org.janelia.saalfeldlab.graph.UndirectedGraph;
+import org.janelia.saalfeldlab.graph.edge.Edge;
+import org.janelia.saalfeldlab.graph.edge.EdgeMerger;
+import org.janelia.saalfeldlab.graph.edge.EdgeWeight;
+import org.janelia.saalfeldlab.regionmerging.MergeNotify;
+import org.janelia.saalfeldlab.regionmerging.RegionMerging;
+import org.janelia.saalfeldlab.util.unionfind.HashMapStoreUnionFind;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import de.hanslovsky.graph.UndirectedGraph;
-import de.hanslovsky.graph.edge.Edge;
-import de.hanslovsky.graph.edge.EdgeMerger;
-import de.hanslovsky.graph.edge.EdgeWeight;
-import de.hanslovsky.util.unionfind.HashMapStoreUnionFind;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.list.array.TLongArrayList;
 import gnu.trove.map.hash.TIntObjectHashMap;

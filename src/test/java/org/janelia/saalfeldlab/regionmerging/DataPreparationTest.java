@@ -1,4 +1,4 @@
-package de.hanslovsky.regionmerging;
+package org.janelia.saalfeldlab.regionmerging;
 
 import java.io.Serializable;
 import java.util.Arrays;
@@ -18,6 +18,14 @@ import java.util.stream.LongStream;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.serializer.KryoRegistrator;
+import org.janelia.saalfeldlab.graph.edge.Edge;
+import org.janelia.saalfeldlab.graph.edge.EdgeCreator;
+import org.janelia.saalfeldlab.graph.edge.EdgeMerger;
+import org.janelia.saalfeldlab.graph.edge.EdgeCreator.NoDataSerializableCreator;
+import org.janelia.saalfeldlab.graph.edge.EdgeMerger.MAX_AFFINITY_MERGER;
+import org.janelia.saalfeldlab.regionmerging.DataPreparation;
+import org.janelia.saalfeldlab.regionmerging.HashWrapper;
+import org.janelia.saalfeldlab.regionmerging.BlockedRegionMergingSpark.Data;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Test;
@@ -27,12 +35,6 @@ import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
-import de.hanslovsky.graph.edge.Edge;
-import de.hanslovsky.graph.edge.EdgeCreator;
-import de.hanslovsky.graph.edge.EdgeCreator.NoDataSerializableCreator;
-import de.hanslovsky.graph.edge.EdgeMerger;
-import de.hanslovsky.graph.edge.EdgeMerger.MAX_AFFINITY_MERGER;
-import de.hanslovsky.regionmerging.BlockedRegionMergingSpark.Data;
 import gnu.trove.iterator.TIntIterator;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.map.custom_hash.TObjectLongCustomHashMap;
