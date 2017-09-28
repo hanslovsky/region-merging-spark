@@ -1,5 +1,6 @@
 package de.hanslovsky.regionmerging;
 
+import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -11,6 +12,8 @@ import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.broadcast.Broadcast;
 import org.apache.spark.storage.StorageLevel;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import de.hanslovsky.graph.UndirectedGraph;
 import de.hanslovsky.graph.edge.Edge;
@@ -30,6 +33,8 @@ import scala.Tuple3;
 
 public class BlockedRegionMergingSpark
 {
+
+	public static Logger LOG = LoggerFactory.getLogger( MethodHandles.lookup().lookupClass() );
 
 	public static class Data
 	{
@@ -160,12 +165,13 @@ public class BlockedRegionMergingSpark
 		while ( !hasReachedSingleBlock )
 		{
 			hasReachedSingleBlock = targetRdd.count() == 1;
-			System.out.println( targetRdd.count() + " blocks at iteration " + iteration );
+			LOG.info( targetRdd.count() + " blocks at iteration " + iteration );
 			final int finalIteration = iteration;
-			targetRdd.map( t -> {
-				System.out.println( Arrays.toString( t._1().getData() ) + ": Starting agglomeration with " + new Edge( t._2().edges(), dataSize ).size() + " edges, and " + t._2().nonContractingEdges().values().stream().mapToInt( c -> c.size() ).sum() + " non-contracting edges." );
-				return t;
-			} ).count();
+			if ( LOG.isDebugEnabled() )
+				targetRdd.map( t -> {
+					LOG.debug( Arrays.toString( t._1().getData() ) + ": Starting agglomeration with " + new Edge( t._2().edges(), dataSize ).size() + " edges, and " + t._2().nonContractingEdges().values().stream().mapToInt( c -> c.size() ).sum() + " non-contracting edges." );
+					return t;
+				} ).count();
 			final JavaPairRDD< HashWrapper< long[] >, Tuple3< Data, TLongArrayList, HashMapStoreUnionFind > > mergedEdgesWithMergeLog = createGraphAndContractMinimalEdges( targetRdd, optionsBC, merger, edgeWeight, mergeNotifyGenerator, finalIteration );
 			mergedEdgesWithMergeLog.cache();
 			final JavaPairRDD< HashWrapper< long[] >, Data > mergedEdges = mergedEdgesWithMergeLog.mapValues( p -> p._1() );
@@ -183,7 +189,7 @@ public class BlockedRegionMergingSpark
 			previous.unpersist();
 			mergedEdgesWithMergeLog.unpersist();
 
-			System.out.println( "Finished iteration " + iteration );
+			LOG.info( "Finished iteration " + iteration );
 			++iteration;
 
 		}
