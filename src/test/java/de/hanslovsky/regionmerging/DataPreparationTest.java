@@ -155,12 +155,10 @@ public class DataPreparationTest
 			final long[] min = IntStream.range( 0, dimensions.length ).mapToLong( d -> g._1().getData()[ d ] * blockSize[ d ] ).toArray();
 			final long[] max = IntStream.range( 0, dimensions.length ).mapToLong( d -> Math.min( min[ d ] + blockSize[ d ], dimensions[ d ] ) - 1 ).toArray();
 
-//			System.out.println( Arrays.toString( min ) + " " + Arrays.toString( max ) );
 			final FinalInterval interval = new FinalInterval( min, max );
 			final long nEdges = 2 * Intervals.numElements( interval ) - interval.dimension( 0 ) - interval.dimension( 1 );
 			final Edge e = new Edge( g._2().edges(), 0 );
 
-//			System.out.println( "ABSURD!" + " " + g._2().nonContractingEdges() );
 			final TIntHashSet nonContractingEdges = new TIntHashSet();
 			g._2().nonContractingEdges().values().forEach( nonContractingEdges::addAll );
 			int contractingEdgeCount = 0;
@@ -540,7 +538,6 @@ public class DataPreparationTest
 			output.writeInt( object.nonContractingEdges().size() );
 			for ( final Entry< HashWrapper< long[] >, TIntHashSet > entry : object.nonContractingEdges().entrySet() )
 			{
-//				System.out.println( "Writing entry: " + entry );
 				output.writeInt( entry.getKey().getData().length );
 				output.writeLongs( entry.getKey().getData() );
 				output.writeInt( entry.getValue().size() );
@@ -565,13 +562,10 @@ public class DataPreparationTest
 			final HashMap< HashWrapper< long[] >, TIntHashSet > nonContractingEdges = new HashMap<>();
 			for ( int i = 0; i < size; ++i )
 			{
-//				System.out.println( "reading key" );
 				final int nDim = input.readInt();
 				final HashWrapper< long[] > key = HashWrapper.longArray( input.readLongs( nDim ) );
-//				System.out.println( "reading value" );
 				final int setSize = input.readInt();
 				final TIntHashSet value = new TIntHashSet( input.readInts( setSize ) );
-//				System.out.println( "ok" );
 				nonContractingEdges.put( key, value );
 			}
 
