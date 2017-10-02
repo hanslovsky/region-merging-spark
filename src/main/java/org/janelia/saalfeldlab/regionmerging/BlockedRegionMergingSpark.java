@@ -1,23 +1,22 @@
 package org.janelia.saalfeldlab.regionmerging;
 
+import java.io.Serializable;
 import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.function.BiConsumer;
-import java.util.function.IntFunction;
 
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.function.Function;
 import org.apache.spark.broadcast.Broadcast;
 import org.apache.spark.storage.StorageLevel;
 import org.janelia.saalfeldlab.graph.UndirectedGraph;
 import org.janelia.saalfeldlab.graph.edge.Edge;
 import org.janelia.saalfeldlab.graph.edge.EdgeMerger;
 import org.janelia.saalfeldlab.graph.edge.EdgeWeight;
-import org.janelia.saalfeldlab.regionmerging.MergeNotify;
-import org.janelia.saalfeldlab.regionmerging.RegionMerging;
 import org.janelia.saalfeldlab.util.unionfind.HashMapStoreUnionFind;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,7 +37,7 @@ public class BlockedRegionMergingSpark
 
 	public static Logger LOG = LoggerFactory.getLogger( MethodHandles.lookup().lookupClass() );
 
-	public static class Data
+	public static class Data implements Serializable
 	{
 
 		private final TDoubleArrayList edges;
@@ -120,32 +119,22 @@ public class BlockedRegionMergingSpark
 		}
 	}
 
-	public static interface MergeHandlerFactory
-	{
-
-		public MergeNotify create( int iteration );
-
-	}
-
 	private final EdgeMerger merger;
 
 	private final EdgeWeight edgeWeight;
 
-	private final IntFunction< MergeNotifyWithFinishNotification > mergeNotifyGenerator;
-
 	private final int factor;
 
-	public BlockedRegionMergingSpark( final EdgeMerger merger, final EdgeWeight edgeWeight, final IntFunction< MergeNotifyWithFinishNotification > mergeHandlerGenerator )
+	public BlockedRegionMergingSpark( final EdgeMerger merger, final EdgeWeight edgeWeight )
 	{
-		this( merger, edgeWeight, mergeHandlerGenerator, 2 );
+		this( merger, edgeWeight, 2 );
 	}
 
-	public BlockedRegionMergingSpark( final EdgeMerger merger, final EdgeWeight edgeWeight, final IntFunction< MergeNotifyWithFinishNotification > mergeNotifyGenerator, final int factor )
+	public BlockedRegionMergingSpark( final EdgeMerger merger, final EdgeWeight edgeWeight, final int factor )
 	{
 		super();
 		this.merger = merger;
 		this.edgeWeight = edgeWeight;
-		this.mergeNotifyGenerator = mergeNotifyGenerator;
 		this.factor = factor;
 	}
 
@@ -174,7 +163,7 @@ public class BlockedRegionMergingSpark
 					LOG.debug( Arrays.toString( t._1().getData() ) + ": Starting agglomeration with " + new Edge( t._2().edges(), dataSize ).size() + " edges, and " + t._2().nonContractingEdges().values().stream().mapToInt( c -> c.size() ).sum() + " non-contracting edges." );
 					return t;
 				} ).count();
-			final JavaPairRDD< HashWrapper< long[] >, Tuple3< Data, TLongArrayList, HashMapStoreUnionFind > > mergedEdgesWithMergeLog = createGraphAndContractMinimalEdges( targetRdd, optionsBC, merger, edgeWeight, mergeNotifyGenerator, finalIteration );
+			final JavaPairRDD< HashWrapper< long[] >, Tuple3< Data, TLongArrayList, HashMapStoreUnionFind > > mergedEdgesWithMergeLog = createGraphAndContractMinimalEdges( targetRdd, optionsBC, merger, edgeWeight, finalIteration );
 			mergedEdgesWithMergeLog.cache();
 			final JavaPairRDD< HashWrapper< long[] >, Data > mergedEdges = mergedEdgesWithMergeLog.mapValues( p -> p._1() );
 			mergesLogger.accept( iteration, mergedEdgesWithMergeLog.mapValues( p -> new Tuple2<>( p._2(), p._3() ) ) );
@@ -267,21 +256,43 @@ public class BlockedRegionMergingSpark
 			final Broadcast< Options > optionsBC,
 			final EdgeMerger merger,
 			final EdgeWeight edgeWeight,
-			final IntFunction< MergeNotifyWithFinishNotification > notifyGenerator,
 			final int iteration )
 	{
-		return input.mapValues( data -> createGraphAndContractMinimalEdges( data, optionsBC, merger, edgeWeight, notifyGenerator, iteration ) );
+		return input.mapValues( new Contract( optionsBC, merger, edgeWeight ) );
 	}
 
-	private static Tuple3< Data, TLongArrayList, HashMapStoreUnionFind > createGraphAndContractMinimalEdges( final Data data, final Broadcast< Options > optionsBC, final EdgeMerger merger, final EdgeWeight edgeWeight, final IntFunction< MergeNotifyWithFinishNotification > notifyGenerator, final int iteration )
+	public static class Contract implements Function< Data, Tuple3< Data, TLongArrayList, HashMapStoreUnionFind > >
+	{
+
+		private final Broadcast< Options > optionsBC;
+
+		private final EdgeMerger merger;
+
+		private final EdgeWeight weight;
+
+		public Contract( final Broadcast< Options > optionsBC, final EdgeMerger merger, final EdgeWeight weight )
+		{
+			super();
+			this.optionsBC = optionsBC;
+			this.merger = merger;
+			this.weight = weight;
+		}
+
+		@Override
+		public Tuple3< Data, TLongArrayList, HashMapStoreUnionFind > call( final Data data ) throws Exception
+		{
+			return createGraphAndContractMinimalEdges( data, optionsBC, merger, weight );
+		}
+
+	}
+
+	private static Tuple3< Data, TLongArrayList, HashMapStoreUnionFind > createGraphAndContractMinimalEdges( final Data data, final Broadcast< Options > optionsBC, final EdgeMerger merger, final EdgeWeight edgeWeight )
 	{
 		final TIntHashSet nonContractingEdges = new TIntHashSet();
 		final Options opt = optionsBC.getValue();
 		data.nonContractingEdges.values().forEach( nonContractingEdges::addAll );
 		final UndirectedGraph g = new UndirectedGraph( data.edges, createNodeEdgeMap( new Edge( data.edges, edgeWeight.dataSize() ) ), edgeWeight.dataSize() );
-		final MergeNotifyWithFinishNotification notify = notifyGenerator.apply( iteration );
-		final Pair< TLongArrayList, HashMapStoreUnionFind > mergesAndMapping = RegionMerging.mergeLocallyMinimalEdges( g, merger, edgeWeight, data.counts, opt.threshold, opt.minimuMultiplicity, nonContractingEdges, notify );
-		notify.notifyDone();
+		final Pair< TLongArrayList, HashMapStoreUnionFind > mergesAndMapping = RegionMerging.mergeLocallyMinimalEdges( g, merger, edgeWeight, data.counts, opt.threshold, opt.minimuMultiplicity, nonContractingEdges );
 		final TLongArrayList merges = mergesAndMapping.getA();
 		final HashMapStoreUnionFind mapping = mergesAndMapping.getB();
 
