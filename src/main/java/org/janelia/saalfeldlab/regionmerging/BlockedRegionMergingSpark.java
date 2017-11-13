@@ -164,11 +164,16 @@ public class BlockedRegionMergingSpark
 					return t;
 				} ).count();
 			final JavaPairRDD< HashWrapper< long[] >, Tuple3< Data, TLongArrayList, HashMapStoreUnionFind > > mergedEdgesWithMergeLog = createGraphAndContractMinimalEdges( targetRdd, optionsBC, merger, edgeWeight, finalIteration );
+//			mergedEdgesWithMergeLog.map( t -> {
+//				if ( t._2()._2().size() == 0 )
+//					System.out.println( "ONLY ZERO MERGES WHY? " + Arrays.toString( t._1().getData() ) );
+//				return true;
+//			} ).count();
 			mergedEdgesWithMergeLog.cache();
 			final JavaPairRDD< HashWrapper< long[] >, Data > mergedEdges = mergedEdgesWithMergeLog.mapValues( p -> p._1() );
 			mergesLogger.accept( iteration, mergedEdgesWithMergeLog.mapValues( p -> new Tuple2<>( p._2(), p._3() ) ) );
 
-			final JavaPairRDD< HashWrapper< long[] >, Data > remapped = adjustPosition( mergedEdges, this.factor );
+			final JavaPairRDD< HashWrapper< long[] >, Data > remapped = adjustPosition( mergedEdges, this.factor, edgeWeight.dataSize() );
 
 			final JavaPairRDD< HashWrapper< long[] >, List< Data > > aggregated = aggregateAsList( remapped );
 
@@ -230,25 +235,56 @@ public class BlockedRegionMergingSpark
 		return nodeEdgeMap;
 	}
 
-	private static JavaPairRDD< HashWrapper< long[] >, Data > adjustPosition( final JavaPairRDD< HashWrapper< long[] >, Data > input, final int factor )
+	private static JavaPairRDD< HashWrapper< long[] >, Data > adjustPosition( final JavaPairRDD< HashWrapper< long[] >, Data > input, final int factor, final int dataSize )
 	{
-		return input.mapToPair( t -> adjustPosition( t, factor ) );
+		return input.mapToPair( t -> adjustPosition( t, factor, dataSize ) );
 	}
 
-	private static Tuple2< HashWrapper< long[] >, Data > adjustPosition( final Tuple2< HashWrapper< long[] >, Data > t, final int factor )
+	private static Tuple2< HashWrapper< long[] >, Data > adjustPosition( final Tuple2< HashWrapper< long[] >, Data > t, final int factor, final int dataSize )
 	{
 		final long[] key = adjustPosition( t._1().getData(), factor );
 		final HashWrapper< long[] > hashedKey = new HashWrapper<>( key, t._1().getHash(), t._1().getEquals() );
 		final Data data = t._2();
 		final HashMap< HashWrapper< long[] >, TIntHashSet > nonContractingEdges = new HashMap<>();
-		// keep non-contracting edges when not in the same block (after
-		// adjusting coordinates)
+		final TIntObjectHashMap< HashWrapper< long[] > > inverseNonContractingEdges = new TIntObjectHashMap<>();
+
 		data.nonContractingEdges.forEach( ( k, v ) -> {
 			final long[] adjustedKey = adjustPosition( k.getData(), factor );
-			if ( !Arrays.equals( adjustedKey, key ) )
-				nonContractingEdges.put( new HashWrapper<>( adjustedKey, k.getHash(), k.getEquals() ), v );
+			final HashWrapper< long[] > wrapped = new HashWrapper<>( adjustedKey, k.getHash(), k.getEquals() );
+			if ( !Arrays.equals( adjustedKey, key ) ) {
+				nonContractingEdges.put( wrapped, new TIntHashSet() );
+//				nonContractingEdges.put( new HashWrapper<>( adjustedKey, k.getHash(), k.getEquals() ), v );
+				v.forEach( entry -> {
+					inverseNonContractingEdges.put( entry, wrapped );
+					return true;
+				} );
+			}
 		} );
-		return new Tuple2<>( hashedKey, new Data( data.edges, nonContractingEdges, data.counts ) );
+
+
+
+		final TDoubleArrayList newEdgeStore = new TDoubleArrayList();
+		final Edge newEdge = new Edge( newEdgeStore, dataSize );
+		final Edge oldEdge = new Edge( data.edges, dataSize );
+
+		for ( int i = 0; i < oldEdge.size(); ++i )
+		{
+			oldEdge.setIndex( i );
+			if ( oldEdge.isValid() )
+			{
+				newEdge.setIndex( newEdge.size() - 1 );
+				newEdge.add( oldEdge );
+				final HashWrapper< long[] > wrapped = inverseNonContractingEdges.get( i );
+				if ( wrapped != null )
+					nonContractingEdges.get( wrapped ).add( newEdge.size() - 1 );
+			}
+		}
+
+
+		// keep non-contracting edges when not in the same block (after
+		// adjusting coordinates)
+
+		return new Tuple2<>( hashedKey, new Data( newEdgeStore, nonContractingEdges, new TLongLongHashMap() ) );
 	}
 
 	private static final JavaPairRDD< HashWrapper< long[] >, Tuple3< Data, TLongArrayList, HashMapStoreUnionFind > > createGraphAndContractMinimalEdges(
