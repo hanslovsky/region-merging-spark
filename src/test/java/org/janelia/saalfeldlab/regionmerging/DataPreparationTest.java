@@ -20,11 +20,9 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.serializer.KryoRegistrator;
 import org.janelia.saalfeldlab.graph.edge.Edge;
 import org.janelia.saalfeldlab.graph.edge.EdgeCreator;
-import org.janelia.saalfeldlab.graph.edge.EdgeMerger;
 import org.janelia.saalfeldlab.graph.edge.EdgeCreator.NoDataSerializableCreator;
+import org.janelia.saalfeldlab.graph.edge.EdgeMerger;
 import org.janelia.saalfeldlab.graph.edge.EdgeMerger.MAX_AFFINITY_MERGER;
-import org.janelia.saalfeldlab.regionmerging.DataPreparation;
-import org.janelia.saalfeldlab.regionmerging.HashWrapper;
 import org.janelia.saalfeldlab.regionmerging.BlockedRegionMergingSpark.Data;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -545,11 +543,6 @@ public class DataPreparationTest
 				output.writeInt( entry.getValue().size() );
 				output.writeInts( entry.getValue().toArray() );
 			}
-
-			// counts
-			output.writeInt( object.counts().size() );
-			output.writeLongs( object.counts().keys() );
-			output.writeLongs( object.counts().values() );
 		}
 
 		@Override
@@ -571,15 +564,9 @@ public class DataPreparationTest
 				nonContractingEdges.put( key, value );
 			}
 
-			// counts
-			final int numNodes = input.readInt();
-			final long[] keys = input.readLongs( numNodes );
-			final long[] values = input.readLongs( numNodes );
-			final TLongLongHashMap counts = new TLongLongHashMap( keys, values );
 			return new Data(
 					edgeStore,
-					nonContractingEdges,
-					counts );
+					nonContractingEdges );
 		}
 	}
 

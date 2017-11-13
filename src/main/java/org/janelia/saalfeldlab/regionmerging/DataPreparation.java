@@ -17,7 +17,6 @@ import org.janelia.saalfeldlab.regionmerging.BlockedRegionMergingSpark.Data;
 
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.map.hash.TLongIntHashMap;
-import gnu.trove.map.hash.TLongLongHashMap;
 import gnu.trove.map.hash.TLongObjectHashMap;
 import gnu.trove.set.hash.TIntHashSet;
 import net.imglib2.Cursor;
@@ -103,7 +102,6 @@ public class DataPreparation
 			final Edge dummy = new Edge( new TDoubleArrayList(), creator.dataSize() );
 			final TLongObjectHashMap< TLongIntHashMap > nodeEdgeMap = new TLongObjectHashMap<>();
 			final HashMap< HashWrapper< long[] >, TIntHashSet > nonContractingEdges = new HashMap<>();
-			final TLongLongHashMap counts = new TLongLongHashMap();
 
 			for ( int d = 0; d < nDim; ++d )
 			{
@@ -136,7 +134,7 @@ public class DataPreparation
 				}
 
 			}
-			final Data dat = new Data( edgeStore, nonContractingEdges, counts );
+			final Data dat = new Data( edgeStore, nonContractingEdges );
 
 			return new Tuple2<>( positionAndData._1(), dat );
 		} );
@@ -390,7 +388,6 @@ public class DataPreparation
 			final Edge dummy = new Edge( new TDoubleArrayList(), creator.dataSize() );
 			final TLongObjectHashMap< TLongIntHashMap > nodeEdgeMap = new TLongObjectHashMap<>();
 			final HashMap< HashWrapper< long[] >, TIntHashSet > nonContractingEdges = new HashMap<>();
-			final TLongLongHashMap counts = new TLongLongHashMap();
 
 			for ( int d = 0; d < nDim; ++d )
 			{
@@ -439,7 +436,7 @@ public class DataPreparation
 				}
 
 			}
-			final Data dat = new Data( edgeStore, nonContractingEdges, counts );
+			final Data dat = new Data( edgeStore, nonContractingEdges );
 
 			return new Tuple2<>( positionAndData._1(), dat );
 		} );
@@ -450,7 +447,23 @@ public class DataPreparation
 
 	public static < K > JavaPairRDD< K, Data > setValidAndStale( final JavaPairRDD< K, Data > input, final int dataSize )
 	{
-		return input.mapValues( data -> {
+		return input.mapValues( new SetValidAndStale( dataSize ) );
+	}
+
+	public static class SetValidAndStale implements org.apache.spark.api.java.function.Function< Data, Data >
+	{
+
+		private final int dataSize;
+
+		public SetValidAndStale( final int dataSize )
+		{
+			super();
+			this.dataSize = dataSize;
+		}
+
+		@Override
+		public Data call( final Data data ) throws Exception
+		{
 			final Edge e = new Edge( data.edges(), dataSize );
 			final int numEdges = e.size();
 			for ( int i = 0; i < numEdges; ++i )
@@ -460,6 +473,7 @@ public class DataPreparation
 				e.setStale();
 			}
 			return data;
-		} );
+		}
+
 	}
 }

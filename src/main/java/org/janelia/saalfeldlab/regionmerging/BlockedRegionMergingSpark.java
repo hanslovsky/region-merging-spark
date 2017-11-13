@@ -25,7 +25,6 @@ import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.list.array.TLongArrayList;
 import gnu.trove.map.hash.TIntObjectHashMap;
 import gnu.trove.map.hash.TLongIntHashMap;
-import gnu.trove.map.hash.TLongLongHashMap;
 import gnu.trove.map.hash.TLongObjectHashMap;
 import gnu.trove.set.hash.TIntHashSet;
 import net.imglib2.util.Pair;
@@ -44,14 +43,11 @@ public class BlockedRegionMergingSpark
 
 		private final HashMap< HashWrapper< long[] >, TIntHashSet > nonContractingEdges;
 
-		private final TLongLongHashMap counts;
-
-		public Data( final TDoubleArrayList edges, final HashMap< HashWrapper< long[] >, TIntHashSet > nonContractingEdges, final TLongLongHashMap counts )
+		public Data( final TDoubleArrayList edges, final HashMap< HashWrapper< long[] >, TIntHashSet > nonContractingEdges )
 		{
 			super();
 			this.edges = edges;
 			this.nonContractingEdges = nonContractingEdges;
-			this.counts = counts;
 		}
 
 		public TDoubleArrayList edges()
@@ -62,11 +58,6 @@ public class BlockedRegionMergingSpark
 		public HashMap< HashWrapper< long[] >, TIntHashSet > nonContractingEdges()
 		{
 			return nonContractingEdges;
-		}
-
-		public TLongLongHashMap counts()
-		{
-			return counts;
 		}
 
 	}
@@ -284,7 +275,7 @@ public class BlockedRegionMergingSpark
 		// keep non-contracting edges when not in the same block (after
 		// adjusting coordinates)
 
-		return new Tuple2<>( hashedKey, new Data( newEdgeStore, nonContractingEdges, new TLongLongHashMap() ) );
+		return new Tuple2<>( hashedKey, new Data( newEdgeStore, nonContractingEdges ) );
 	}
 
 	private static final JavaPairRDD< HashWrapper< long[] >, Tuple3< Data, TLongArrayList, HashMapStoreUnionFind > > createGraphAndContractMinimalEdges(
@@ -328,7 +319,7 @@ public class BlockedRegionMergingSpark
 		final Options opt = optionsBC.getValue();
 		data.nonContractingEdges.values().forEach( nonContractingEdges::addAll );
 		final UndirectedGraph g = new UndirectedGraph( data.edges, createNodeEdgeMap( new Edge( data.edges, edgeWeight.dataSize() ) ), edgeWeight.dataSize() );
-		final Pair< TLongArrayList, HashMapStoreUnionFind > mergesAndMapping = RegionMerging.mergeLocallyMinimalEdges( g, merger, edgeWeight, data.counts, opt.threshold, opt.minimuMultiplicity, nonContractingEdges );
+		final Pair< TLongArrayList, HashMapStoreUnionFind > mergesAndMapping = RegionMerging.mergeLocallyMinimalEdges( g, merger, edgeWeight, opt.threshold, opt.minimuMultiplicity, nonContractingEdges );
 		final TLongArrayList merges = mergesAndMapping.getA();
 		final HashMapStoreUnionFind mapping = mergesAndMapping.getB();
 
@@ -358,12 +349,9 @@ public class BlockedRegionMergingSpark
 		final TDoubleArrayList edgeStore = new TDoubleArrayList();
 		final Edge e = new Edge( edgeStore, dataSize );
 		final HashMap< HashWrapper< long[] >, TIntHashSet > nonContractingEdges = new HashMap<>();
-		final TLongLongHashMap counts = new TLongLongHashMap();
 
 		for ( final Data d : dataList )
 		{
-
-			counts.putAll( d.counts );
 
 			// invert mapping such that we can check if edge is non-contracting
 			// more easily
@@ -395,7 +383,7 @@ public class BlockedRegionMergingSpark
 
 		}
 
-		return new Data( edgeStore, nonContractingEdges, counts );
+		return new Data( edgeStore, nonContractingEdges );
 	}
 
 	private static JavaPairRDD< HashWrapper< long[] >, List< Data > > aggregateAsList( final JavaPairRDD< HashWrapper< long[] >, Data > remapped )
